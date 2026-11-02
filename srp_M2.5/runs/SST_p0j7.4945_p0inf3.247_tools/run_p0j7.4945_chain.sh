@@ -1,7 +1,9 @@
 #!/bin/bash
 # k-omega SST chain for srp_M2.5 with the corrected jet inlet, p0j 7.4945 bar / p0inf 3.247 bar (user, 2026-11-02).
-# Configs built by setup_p0j7.4945.sh. Every mesh restarts from its own SST 8.015 bar final solution, then t1 cap 0.5
-# (5000), t2 cap 1 (25000), t3 cap 3 (20000). Order: coarse, medium, fine, fineJet, fineJet2, veryFine. Every stage runs
+# Configs built by setup_p0j7.4945.sh. Coarse restarts from its own SST 8.015 bar final solution; every other mesh starts
+# from the previous, coarser mesh's new t3 solution, interpolated (0_interp; user, 2026-11-03): medium <- coarse,
+# fine <- medium, fineJet <- fine, fineJet2 <- fineJet, veryFine <- fine. Then t1 cap 0.5 (5000), t2 cap 1 (25000),
+# t3 cap 3 (20000). Order: coarse, medium, fine, fineJet, fineJet2, veryFine. Every stage runs
 # its full length; the watchers only log and plot.
 #   After each mesh: its line check (t2 vs t3) and old inlet (8.015 bar, final) vs new (t3) lines.
 #   At the end: grid lines across the six meshes and the 0.025 mm box resample of the final solutions.
@@ -32,6 +34,7 @@ done_step() {  # done_step <folder> <cfg>: true if that SU2 run finished all its
   local it n=$(sed -n 's/^ITER= *\([0-9]*\).*/\1/p' $1/$2)
   grep -q "SU2_CFD exit=0" $1/${2%.cfg}.log 2>/dev/null || return 1
   [ -s $1/restart.dat ] || return 1
+  [ "$n" = 1 ] && return 0          # interpolation: 1 iteration
   it=$(last_it $1); [ -n "$it" ] && [ "$it" -eq $((n - 1)) ]
 }
 stage() {  # stage <run folder> <stage> <previous stage folder or ->
@@ -57,6 +60,12 @@ lines() {  # lines <run folder> <mesh>: t2 vs t3, and old vs new inlet, into <ru
 
 for m in $MESHES; do
   d=$(run $m); prev=-
+  if [ $m != Coarse ] && ! done_step $d/0_interp interp.cfg; then
+    echo "$m interpolation start $(date): $(sed -n 's/^SOLUTION_FILENAME= *//p' $d/0_interp/interp.cfg)"
+    su2 $d/0_interp interp.cfg
+    grep -q "does not match the mesh" $d/0_interp/interp.log && echo "  (SU2 interpolated: point counts differ)"
+    done_step $d/0_interp interp.cfg || { echo "INTERPOLATION FAILED: $m. Chain stopped."; exit 1; }
+  fi
   for s in t1_cap0.5 t2_cap1 t3_cap3; do stage $d $s $prev; prev=$d/2_jet_staged/$s; done
   [ -s $d/analysis/inlet_lines.png ] || lines $d $m
 done

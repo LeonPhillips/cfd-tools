@@ -16,8 +16,11 @@ Runs: `../SST_p0j7.4945_p0inf3.247_mesh{Coarse,Medium,Fine,FineJet,FineJet2,Very
   The choked throat sets the mass flow, so the inlet static p and V come out close to, not exactly at, the given values.
 - **Everything else as the SST study** (`../SST_p0j8.015_p0inf3.247_tools/README.md`): freestream, gas, walls,
   numerics, SST V2003m with no compressibility correction, freestream TI 1 % / mu_t/mu 1, jet TI 2 % / mu_t/mu 10, meshes.
-- **Start:** each mesh restarts from its own SST 8.015 bar final solution (coarse t4_cap3, others t3_cap3). Same mesh,
-  so no interpolation; no Phase 1.
+- **Start:** coarse restarts from its own SST 8.015 bar final solution (t4_cap3; same mesh, no Phase 1). **Every other
+  mesh starts from the new final (t3) solution of the previous, coarser mesh, interpolated** (`0_interp`; user,
+  2026-11-03): medium <- coarse, fine <- medium, fineJet <- fine, fineJet2 <- fineJet, veryFine <- fine (as the SST study).
+  The first launch (2026-11-03 09:43) restarted every mesh from its own 8.015 bar solution; it was switched to this
+  while coarse t3 was running, so coarse is unaffected.
 - **Stages per mesh:** t1 cap 0.5 (5000, CFL from 0.1), t2 cap 1 (25000, from 0.5), t3 cap 3 (20000, from 1), floor 0.1,
   x1.01 ramp. The coarse configs are the meshMedium ones with the coarse mesh file.
 - **Nothing stops on convergence** (`CONV_RESIDUAL_MINVAL= -20`); the watchers only log.
@@ -25,7 +28,8 @@ Runs: `../SST_p0j7.4945_p0inf3.247_mesh{Coarse,Medium,Fine,FineJet,FineJet2,Very
   (`../SST_rhoj8.681_Uj99.11_p0inf3.247_tools/`).
 
 ## Tooling
-- `setup_p0j7.4945.sh` built the configs from the SST 8.015 bar ones; only the inlet line, header and t1 source change.
+- `setup_p0j7.4945.sh` built the configs from the SST 8.015 bar ones; only the inlet line, headers and sources change.
+  `UPDATE=1` rebuilt the non-coarse meshes for the interpolation change.
 - `test_inlets.sh`: short checks of this case and of the MASS_FLOW case before launch (log `test_inlets.log`).
 - `run_p0j7.4945_chain.sh`: the chain, restartable. Per mesh, `analysis/conv_lines.*` (t2 vs t3) and
   `analysis/inlet_lines.*` (8.015 bar final vs 7.4945 bar t3). At the end, `../grid_compare/sst_p0j7.4945_grid_lines.*`
