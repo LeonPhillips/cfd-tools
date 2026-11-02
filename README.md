@@ -9,9 +9,9 @@ Code only: no meshes, solutions, logs or figures (`.gitignore` blocks the common
 |---|---|---|
 | Edit here | `Simulation/scripts/` on the PC (OneDrive) | Edit, commit, push |
 | GitHub | `cfd-tools` (private) | The master copy |
-| M3 clone | `~/cfd-tools` | `git pull` before use; never edit on M3 |
+| M3 clone | `/scratch/qk75/LeonPhillips/PhD/cfd/su2/cfd-tools` | `git pull` before use; never edit on M3 |
 
-Workflow: edit on the PC, commit, push, then `git pull` in `~/cfd-tools` on M3. Run folders on scratch call the scripts
+Workflow: edit on the PC, commit, push, then `git pull` in `/scratch/qk75/LeonPhillips/PhD/cfd/su2/cfd-tools` on M3. Run folders on scratch call the scripts
 from the M3 clone (or copy a pinned version in, noting the commit hash), and keep their outputs on scratch.
 
 ## Layout
