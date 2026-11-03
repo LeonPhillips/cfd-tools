@@ -18,7 +18,8 @@ Runs: `../SST_p0j7.4945_p0inf3.247_mesh{Coarse,Medium,Fine,FineJet,FineJet2,Very
   numerics, SST V2003m with no compressibility correction, freestream TI 1 % / mu_t/mu 1, jet TI 2 % / mu_t/mu 10, meshes.
 - **Start:** coarse restarts from its own SST 8.015 bar final solution (t4_cap3; same mesh, no Phase 1). **Every other
   mesh starts from the new final (t3) solution of the previous, coarser mesh, interpolated** (`0_interp`; user,
-  2026-11-03): medium <- coarse, fine <- medium, fineJet <- fine, fineJet2 <- fineJet, veryFine <- fine (as the SST study).
+  2026-11-03): medium <- coarse, fine <- medium, fineJet <- fine, fineJet2 <- fineJet, **veryFine <- fineJet2** (user,
+  2026-11-03; the SST study used fine).
   The first launch (2026-11-03 09:43) restarted every mesh from its own 8.015 bar solution; it was switched to this
   while coarse t3 was running, so coarse is unaffected.
 - **Stages per mesh:** t1 cap 0.5 (5000, CFL from 0.1), t2 cap 1 (25000, from 0.5), t3 cap 3 (20000, from 1), floor 0.1,

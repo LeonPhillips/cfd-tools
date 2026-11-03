@@ -2,7 +2,7 @@
 # k-omega SST chain for srp_M2.5 with the corrected jet inlet, p0j 7.4945 bar / p0inf 3.247 bar (user, 2026-11-02).
 # Configs built by setup_p0j7.4945.sh. Coarse restarts from its own SST 8.015 bar final solution; every other mesh starts
 # from the previous, coarser mesh's new t3 solution, interpolated (0_interp; user, 2026-11-03): medium <- coarse,
-# fine <- medium, fineJet <- fine, fineJet2 <- fineJet, veryFine <- fine. Then t1 cap 0.5 (5000), t2 cap 1 (25000),
+# fine <- medium, fineJet <- fine, fineJet2 <- fineJet, veryFine <- fineJet2. Then t1 cap 0.5 (5000), t2 cap 1 (25000),
 # t3 cap 3 (20000). Order: coarse, medium, fine, fineJet, fineJet2, veryFine. Every stage runs
 # its full length; the watchers only log and plot.
 #   After each mesh: its line check (t2 vs t3) and old inlet (8.015 bar, final) vs new (t3) lines.

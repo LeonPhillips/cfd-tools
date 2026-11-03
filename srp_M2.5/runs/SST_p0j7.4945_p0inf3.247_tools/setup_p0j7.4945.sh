@@ -4,22 +4,24 @@
 # T0 = 288.15 K (option A): T = 288.15 - 99.11^2/(2*1004.703) = 283.26 K, M = 0.2937, p0 = 7.0588*(1 + 0.2 M^2)^3.5
 # = 7.4945 bar. The inlet stays TOTAL_CONDITIONS; only the p0j value changes.
 # Coarse restarts from its own SST 8.015 bar final solution (t4_cap3, same mesh). Every other mesh starts from the new
-# final (t3_cap3) solution of the previous, coarser mesh, interpolated (0_interp; user, 2026-11-03), with the same sources
-# as the SST study: medium <- coarse, fine <- medium, fineJet <- fine, fineJet2 <- fineJet, veryFine <- fine.
+# final (t3_cap3) solution of the previous, coarser mesh, interpolated (0_interp; user, 2026-11-03): medium <- coarse,
+# fine <- medium, fineJet <- fine, fineJet2 <- fineJet, veryFine <- fineJet2 (user, 2026-11-03; the SST study used fine).
 # Then t1 cap 0.5 (5000) / t2 cap 1 (25000) / t3 cap 3 (20000) on every mesh. The coarse configs are the meshMedium ones
 # with the coarse mesh file. Nothing stops on convergence.
 # Run on M3 from the cfd-tools clone: bash <clone>/srp_M2.5/runs/SST_p0j7.4945_p0inf3.247_tools/setup_p0j7.4945.sh
-# UPDATE=1 (2026-11-03, while coarse was running): leave coarse alone, rewrite the other meshes' configs, and refresh the
-# run-tree tools (scripts replaced by rename, so a running chain keeps its own copy).
+# UPDATE=1 (2026-11-03, while the chain was running): leave coarse and any mesh with run output alone, rewrite the other
+# meshes' configs, and refresh the run-tree tools (scripts replaced by rename, so a running chain keeps its own copy).
 set -e
 SRC=$(dirname $(readlink -f $0))
 R=/scratch/qk75/LeonPhillips/PhD/cfd/su2/cases/srp_M2.5/runs
 OLD=SST_p0j8.015_p0inf3.247; NEW=SST_p0j7.4945_p0inf3.247
 if [ "$UPDATE" = 1 ]; then
-  MESHES="Medium Fine FineJet FineJet2 VeryFine"
-  for m in $MESHES; do
-    [ -n "$(find $R/${NEW}_mesh$m -name history.csv -not -path '*/test/*' 2>/dev/null)" ] && { echo "$m has run output: not touching it"; exit 1; }
+  MESHES=""
+  for m in Medium Fine FineJet FineJet2 VeryFine; do
+    if [ -n "$(find $R/${NEW}_mesh$m -name history.csv -not -path '*/test/*' 2>/dev/null)" ]; then echo "$m has run output: not touching it"
+    else MESHES="$MESHES $m"; fi
   done
+  [ -n "$MESHES" ] || { echo "nothing to update"; exit 1; }
   for f in $SRC/*.sh $SRC/README.md; do cp $f $R/${NEW}_tools/.new_$(basename $f); mv $R/${NEW}_tools/.new_$(basename $f) $R/${NEW}_tools/$(basename $f); done
   echo "updated from cfd-tools $(git -C $SRC rev-parse HEAD) on $(date) (UPDATE=1)" >> $R/${NEW}_tools/COMMIT
 else
@@ -33,7 +35,7 @@ else
   cp $SRC/../${OLD}_tools/{watch_fj.sh,box_snap.py,box_change.py,plot_conv_roi.py,stage_summary.py} $SRC/*.sh $SRC/README.md $R/${NEW}_tools/
   echo "copied from cfd-tools $(git -C $SRC rev-parse HEAD) on $(date)" > $R/${NEW}_tools/COMMIT
 fi
-declare -A FROM=([Medium]=Coarse [Fine]=Medium [FineJet]=Fine [FineJet2]=FineJet [VeryFine]=Fine)
+declare -A FROM=([Medium]=Coarse [Fine]=Medium [FineJet]=Fine [FineJet2]=FineJet [VeryFine]=FineJet2)
 
 INLET='MARKER_INLET= ( inlet_jet, 288.15, 749446.0, 1.0, 0.0, 0.0 )   % p0j 7.4945 bar, T0j 288.15 K: from p = 7.0588 bar, V = 99.11 m/s (user, 2026-11-02)'
 NOTE='% Phase 2: inlet_jet is a total-conditions inlet, p0j = 7.4945 bar, T0j = 288.15 K, flow in +x (corrected, user 2026-11-02).'
