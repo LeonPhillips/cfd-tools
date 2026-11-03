@@ -1,7 +1,8 @@
 """python schlieren_compare_two.py <a.npz> <label a> <b.npz> <label b> <prefix>
 Two CFD solutions against the same mean experimental image, from the <prefix>.npz files written by schlieren_compare.py
 (each keeps its own LOS fit E = s*C + c). Both must use the same experimental image.
-Writes <prefix>_mirror_LOS.png (one mirror panel per solution, same colour scale), <prefix>_profiles.png and
+Writes <prefix>_mirror_LOS.png (one mirror panel per solution, same colour scale), <prefix>_mirror_CFD.png (a above the
+axis, b below), <prefix>_profiles.png and
 <prefix>_features.csv. Env: CASE_LABEL for the title."""
 import os
 import sys
@@ -44,6 +45,25 @@ axs[-1].set_xlabel("x / D from nozzle exit (freestream from the right)")
 fig.suptitle(f"d(rho)/dx schlieren, {CASE_LABEL}, D = {D} mm; each CFD scaled by its own fit; grey: model / masked")
 fig.tight_layout(); fig.savefig(f"{pre}_mirror_LOS.png", dpi=150); plt.close(fig)
 print("saved", f"{pre}_mirror_LOS.png")
+
+# the two CFD solutions against each other: a above the axis, b below
+comp = np.where(yrow[:, None] >= 0, S[0]["L"], S[1]["L"])
+comp = np.where(S[0]["blocked"] | S[1]["blocked"], np.nan, comp)
+fig, ax = plt.subplots(figsize=(13, 9.5))
+im = ax.imshow(comp, extent=ext, origin="lower" if yrow[0] < yrow[-1] else "upper", cmap=cm,
+               vmin=-lim, vmax=lim, aspect="equal", interpolation="nearest")
+ax.axhline(0, color="y", lw=0.6, ls="--")
+kw = dict(transform=ax.transAxes, ha="left", fontsize=12, color="w", fontweight="bold",
+          bbox=dict(boxstyle="round", fc="k", alpha=0.6))
+ax.text(0.01, 0.97, f"CFD {la} (above axis)", va="top", **kw)
+ax.text(0.01, 0.03, f"CFD {lb} (below axis)", va="bottom", **kw)
+ax.set_xlabel("x / D from nozzle exit (freestream from the right)"); ax.set_ylabel("y / D")
+fig.colorbar(im, ax=ax, shrink=0.75).set_label("schlieren signal [exp grey levels]")
+ax.set_title(f"d(rho)/dx schlieren, line-of-sight integrated, {CASE_LABEL}, D = {D} mm\n"
+             f"each CFD scaled by its own fit to the experiment (above: E = {S[0]['s']:.3g} C + {S[0]['k']:.3g}; "
+             f"below: E = {S[1]['s']:.3g} C + {S[1]['k']:.3g}); grey: model")
+fig.tight_layout(); fig.savefig(f"{pre}_mirror_CFD.png", dpi=150); plt.close(fig)
+print("saved", f"{pre}_mirror_CFD.png")
 
 # profiles along y = const (both halves of the experiment averaged), as in schlieren_compare.py
 lines_mm = [0.01, 1.3, 2.3, 3.0, 6.0, 9.0]
