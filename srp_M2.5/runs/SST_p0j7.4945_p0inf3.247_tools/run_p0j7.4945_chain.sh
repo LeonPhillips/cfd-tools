@@ -2,8 +2,8 @@
 # k-omega SST chain for srp_M2.5 with the corrected jet inlet, p0j 7.4945 bar / p0inf 3.247 bar (user, 2026-11-02).
 # Configs built by setup_p0j7.4945.sh. Coarse restarts from its own SST 8.015 bar final solution; every other mesh starts
 # from the previous, coarser mesh's new t3 solution, interpolated (0_interp; user, 2026-11-03): medium <- coarse,
-# fine <- medium, fineJet <- fine, fineJet2 <- fineJet, veryFine <- fineJet2. Then t1 cap 0.5 (5000), t2 cap 1 (25000),
-# t3 cap 3 (20000). Order: coarse, medium, fine, fineJet, fineJet2, veryFine. Every stage runs
+# fine <- medium, fineJet <- fine, fineJet2 <- fineJet. Then t1 cap 0.5 (5000), t2 cap 1 (25000), t3 cap 3 (20000).
+# Order: coarse, medium, fine, fineJet, fineJet2; no veryFine (user, 2026-11-03). Every stage runs
 # its full length; the watchers only log and plot.
 #   After each mesh: its line check (t2 vs t3) and old inlet (8.015 bar, final) vs new (t3) lines.
 #   At the end: grid lines across the six meshes and the 0.025 mm box resample of the final solutions.
@@ -15,7 +15,7 @@ TOOLS=$(dirname $(readlink -f $0))
 R=/scratch/qk75/LeonPhillips/PhD/cfd/su2/cases/srp_M2.5/runs
 C=$R/SA_p0j8.015_p0inf3.247_meshCoarse   # line_profiles.py, plot_lines.py, check_run.py
 NEW=SST_p0j7.4945_p0inf3.247; OLD=SST_p0j8.015_p0inf3.247
-MESHES="Coarse Medium Fine FineJet FineJet2 VeryFine"
+MESHES="Coarse Medium Fine FineJet FineJet2"
 run() { echo $R/${NEW}_mesh$1; }
 old_final() { [ $1 = Coarse ] && echo $R/${OLD}_meshCoarse/2_jet_staged/t4_cap3 || echo $R/${OLD}_mesh$1/2_jet_staged/t3_cap3; }
 exec >> $TOOLS/chain.log 2>&1
@@ -78,7 +78,7 @@ G=$R/grid_compare; cd $G
     $(for m in $MESHES; do echo "${m,}=$(run $m)/2_jet_staged/t3_cap3/flow.vtu"; done) 2>&1 | grep -vi warning
   H_MM=0.025 pvbatch --mesa $G/resample_box.py box_SST_p0j7.4945_0.025mm.npz \
     $(for m in $MESHES; do echo "SSTp0j7.4945_${m,}=$(run $m)/2_jet_staged/t3_cap3/flow.vtu"; done) 2>&1 | grep -vi warning )
-echo "-- SST p0j 7.4945 bar grid study (differences against veryFine)"
-python $C/plot_lines.py sst_p0j7.4945_grid_lines.png sst_p0j7.4945_grid_lines.npz "SST p0j 7.4945 bar final (t3) solutions: coarse to veryFine"
+echo "-- SST p0j 7.4945 bar grid study (differences against fineJet2)"
+python $C/plot_lines.py sst_p0j7.4945_grid_lines.png sst_p0j7.4945_grid_lines.npz "SST p0j 7.4945 bar final (t3) solutions: coarse to fineJet2"
 ls -l $G/sst_p0j7.4945_grid_lines.* $G/box_SST_p0j7.4945_0.025mm.npz
 echo "ALL_DONE $(date)"

@@ -1,6 +1,6 @@
 # k-omega SST, corrected jet inlet: p0j 7.4945 bar / p0inf 3.247 bar (srp_M2.5)
 
-Runs: `../SST_p0j7.4945_p0inf3.247_mesh{Coarse,Medium,Fine,FineJet,FineJet2,VeryFine}/`. Log: `chain.log`.
+Runs: `../SST_p0j7.4945_p0inf3.247_mesh{Coarse,Medium,Fine,FineJet,FineJet2}/`. Log: `chain.log`.
 
 ## Confirmed assumptions (user, 2026-11-02)
 - **The jet inlet boundary condition used until now (p0j = 8.015 bar) was wrong.** The user gave the jet inlet as
@@ -18,14 +18,17 @@ Runs: `../SST_p0j7.4945_p0inf3.247_mesh{Coarse,Medium,Fine,FineJet,FineJet2,Very
   numerics, SST V2003m with no compressibility correction, freestream TI 1 % / mu_t/mu 1, jet TI 2 % / mu_t/mu 10, meshes.
 - **Start:** coarse restarts from its own SST 8.015 bar final solution (t4_cap3; same mesh, no Phase 1). **Every other
   mesh starts from the new final (t3) solution of the previous, coarser mesh, interpolated** (`0_interp`; user,
-  2026-11-03): medium <- coarse, fine <- medium, fineJet <- fine, fineJet2 <- fineJet, **veryFine <- fineJet2** (user,
-  2026-11-03; the SST study used fine).
+  2026-11-03): medium <- coarse, fine <- medium, fineJet <- fine, fineJet2 <- fineJet.
+  **No veryFine run** (user, 2026-11-03).
+  The chain started at 10:49 (tmux `srp_p0j7`) still had veryFine in its list. Its veryFine folder (configs only) was
+  removed, so that chain stops with "INTERPOLATION FAILED: VeryFine" after fineJet2. That is expected, not an error.
+  tmux `srp_p0j7b` then runs this chain (grid analysis) and the MASS_FLOW chain.
   The first launch (2026-11-03 09:43) restarted every mesh from its own 8.015 bar solution; it was switched to this
   while coarse t3 was running, so coarse is unaffected.
 - **Stages per mesh:** t1 cap 0.5 (5000, CFL from 0.1), t2 cap 1 (25000, from 0.5), t3 cap 3 (20000, from 1), floor 0.1,
   x1.01 ramp. The coarse configs are the meshMedium ones with the coarse mesh file.
 - **Nothing stops on convergence** (`CONV_RESIDUAL_MINVAL= -20`); the watchers only log.
-- Order: coarse, medium, fine, fineJet, fineJet2, veryFine. Then the MASS_FLOW runs
+- Order: coarse, medium, fine, fineJet, fineJet2. Then the MASS_FLOW runs
   (`../SST_rhoj8.681_Uj99.11_p0inf3.247_tools/`).
 
 ## Tooling
