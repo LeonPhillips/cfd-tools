@@ -5,7 +5,9 @@ Synthetic d(rho)/dx schlieren from the axisymmetric CFD, compared with the mean 
 - planar: drho/dx on the axis plane at r = |y|.
 Registration: x/D = (x_cfd - x_exit)/D, y/D = +-r/D. One least-squares fit E = s*C + c per synthetic image, over pixels
 where the beam does not hit the model in the CFD and the background is not dark in the experiment.
-Writes <prefix>_mirror_LOS.png, <prefix>_mirror_planar.png, <prefix>_profiles.png, <prefix>_features.csv, <prefix>.npz"""
+Writes <prefix>_mirror_LOS.png, <prefix>_mirror_planar.png, <prefix>_profiles.png, <prefix>_features.csv, <prefix>.npz
+Env for the plot labels: CFD_LABEL (default "SST meshFineJet2"), CASE_LABEL (default "p0j 8.015 bar, p0inf 3.247 bar")."""
+import os
 import sys
 import numpy as np
 import scipy.io as sio
@@ -16,6 +18,8 @@ import matplotlib.pyplot as plt
 
 fc, fe, pre = sys.argv[1:4]
 D = float(sys.argv[4]) if len(sys.argv) > 4 else 4.6
+CFD_LABEL = os.environ.get("CFD_LABEL", "SST meshFineJet2")
+CASE_LABEL = os.environ.get("CASE_LABEL", "p0j 8.015 bar, p0inf 3.247 bar")
 c = np.load(fc)
 xg, rg, xe = c["x_mm"], c["r_mm"], float(c["xe_mm"])
 h = rg[1] - rg[0]
@@ -83,11 +87,11 @@ for name, C in (("LOS", los), ("planar", plan)):
     kw = dict(transform=ax.transAxes, ha="left", fontsize=12, color="w", fontweight="bold",
               bbox=dict(boxstyle="round", fc="k", alpha=0.6))
     ax.text(0.01, 0.97, "experiment, mean (above axis)", va="top", **kw)
-    lab = "CFD SST meshFineJet2, line-of-sight integrated" if name == "LOS" else "CFD SST meshFineJet2, planar (axis plane)"
+    lab = f"CFD {CFD_LABEL}, line-of-sight integrated" if name == "LOS" else f"CFD {CFD_LABEL}, planar (axis plane)"
     ax.text(0.01, 0.03, f"{lab} (below axis)", va="bottom", **kw)
     ax.set_xlabel("x / D from nozzle exit (freestream from the right)"); ax.set_ylabel("y / D")
     cb = fig.colorbar(im, ax=ax, shrink=0.75); cb.set_label("schlieren signal [exp grey levels]")
-    ax.set_title(f"d(rho)/dx schlieren, NPR 501 case (p0j 8.015 bar, p0inf 3.247 bar), D = {D} mm\n"
+    ax.set_title(f"d(rho)/dx schlieren, NPR 501 case ({CASE_LABEL}), D = {D} mm\n"
                  f"CFD scaled by one fit: E = {s:.3g} C + {k:.3g}, correlation {cc:.2f}; grey: model / masked")
     fig.tight_layout(); fig.savefig(f"{pre}_mirror_{name}.png", dpi=150); plt.close(fig)
     print("saved", f"{pre}_mirror_{name}.png")
@@ -113,7 +117,7 @@ for ax, ymm in zip(axs.flat, lines_mm):
 axs[0, 0].legend()
 for ax in axs[-1]:
     ax.set_xlabel("x / D from nozzle exit")
-fig.suptitle("Schlieren d(rho)/dx along lines of constant y: experiment (mean of +y and -y rows) vs SST CFD (fitted scale)")
+fig.suptitle(f"Schlieren d(rho)/dx along lines of constant y: experiment (mean of +y and -y rows) vs CFD {CFD_LABEL} (fitted scale)")
 fig.tight_layout(); fig.savefig(f"{pre}_profiles.png", dpi=130); plt.close(fig)
 print("saved", f"{pre}_profiles.png")
 
