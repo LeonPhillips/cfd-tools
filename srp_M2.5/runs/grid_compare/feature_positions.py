@@ -29,10 +29,13 @@ import sys
 import numpy as np
 
 X_EXIT, D = 1.875, 4.6
-z = np.load(sys.argv[1])
-x, r = z["x_mm"], z["r_mm"]
-h = x[1] - x[0]
-labels = sys.argv[3:] or [str(s) for s in z["labels"]]
+x = r = h = None   # grid, set by set_grid() (importable: monitor/conv_update.py uses set_grid + features)
+
+
+def set_grid(x_mm, r_mm):
+    global x, r, h
+    x, r = np.asarray(x_mm), np.asarray(r_mm)
+    h = x[1] - x[0]
 
 
 def vertex(xs, g, i):
@@ -103,12 +106,12 @@ cols = ["label", "M_upstream_axis",
         "bow_x_axis", "bow_edge_x_axis", "bow_x_1D", "bow_edge_x_1D", "bow_x_2D", "bow_edge_x_2D",
         "standoff_bow_minus_exit_axis", "shock_layer_bow_minus_stag_axis",
         "sonic_rmax", "sonic_rmax_x"] + [f"bow_x_r{v}" for v in RB] + ["n_jet_peaks", "axis_u0_x", "flags"]
-rows = []
-for lab in labels:
-    M, rho, u = z[f"{lab}_Mach"], z[f"{lab}_Density"], z[f"{lab}_Velocity_x"]
+def features(M, rho, u, label=""):
+    """All features for one solution on the current grid (rows r, columns x). Returns a dict; keys starting with _
+    are extra (the Mach-disk track) and are not written to the CSV."""
     G = np.gradient(rho, h, axis=1)   # d(rho)/dx per mm, rows r
     flags = []
-    out = {"label": lab}
+    out = {"label": label}
     # axis
     xb_edge, xb, Mup = bow(M[0], G[0])
     out.update(M_upstream_axis=Mup, bow_x_axis=xb, bow_edge_x_axis=xb_edge)
@@ -130,6 +133,7 @@ for lab in labels:
             w = (x >= lo) & (x < xi)
             out[f"{name}_M_before"] = np.nanmax(M[0][w])
             rs_, xs_, gs_, mb_ = track(G, M, xi, +1)
+            out[f"_{name}_track"] = (rs_, xs_)
             out[f"{name}_edge_r"], out[f"{name}_edge_x"] = edge(rs_, xs_, gs_, 0.5 * gs_[0], rising=False)
             out[f"{name}_subsonic_edge_r"], out[f"{name}_subsonic_edge_x"] = (
                 edge(rs_, xs_, mb_, 1.0, rising=True) if mb_[0] < 1 else (0.0, xi))
@@ -166,19 +170,29 @@ for lab in labels:
                                 for i in w[:-1] if np.isfinite(u[0][i]) and np.isfinite(u[0][i + 1])
                                 and np.sign(u[0][i]) != np.sign(u[0][i + 1]))
     out["flags"] = "; ".join(flags)
+    return out
+
+
+if __name__ == "__main__":
+  z = np.load(sys.argv[1])
+  set_grid(z["x_mm"], z["r_mm"])
+  labels = sys.argv[3:] or [str(s) for s in z["labels"]]
+  rows = []
+  for lab in labels:
+    out = features(z[f"{lab}_Mach"], z[f"{lab}_Density"], z[f"{lab}_Velocity_x"], lab)
     rows.append(out)
     print(lab, " ".join(f"{k}={out.get(k, np.nan):.3f}" for k in
                         ("shock_crossing_x", "shock_crossing_subsonic_edge_r", "mach_disk_x", "mach_disk_edge_r",
                          "mach_disk_subsonic_edge_r", "stagnation_x",
                          "bow_x_axis", "bow_x_1D", "bow_x_2D", "sonic_rmax")), out["flags"])
 
-with open(sys.argv[2], "w") as f:
-    f.write("# srp_M2.5 key-feature positions from feature_positions.py (cfd-tools); box 0.025 mm, x/r in mm, "
-            f"nozzle exit x = {X_EXIT} mm, D = {D} mm; definitions in the script header\n")
-    # labels are model__inlet__mesh__stage (run_features.sh); written as four columns
-    f.write(",".join(["model", "inlet", "mesh", "stage"] + cols[1:]) + "\n")
-    for o in rows:
-        parts = (o["label"].split("__") + ["", "", "", ""])[:4]
-        f.write(",".join(parts + [o[k] if k in ("flags", "axis_u0_x") else
-                         (str(o[k]) if k == "n_jet_peaks" else f"{o.get(k, np.nan):.4f}") for k in cols[1:]]) + "\n")
-print("saved", sys.argv[2])
+  with open(sys.argv[2], "w") as f:
+      f.write("# srp_M2.5 key-feature positions from feature_positions.py (cfd-tools); box 0.025 mm, x/r in mm, "
+              f"nozzle exit x = {X_EXIT} mm, D = {D} mm; definitions in the script header\n")
+      # labels are model__inlet__mesh__stage (run_features.sh); written as four columns
+      f.write(",".join(["model", "inlet", "mesh", "stage"] + cols[1:]) + "\n")
+      for o in rows:
+          parts = (o["label"].split("__") + ["", "", "", ""])[:4]
+          f.write(",".join(parts + [o[k] if k in ("flags", "axis_u0_x") else
+                           (str(o[k]) if k == "n_jet_peaks" else f"{o.get(k, np.nan):.4f}") for k in cols[1:]]) + "\n")
+  print("saved", sys.argv[2])
