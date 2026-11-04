@@ -7,7 +7,12 @@ D = 4.6 mm. Definitions (user-approved plan, 2026-11-04):
 - Shocks sit at the peak of d(rho)/dx along a line, with a parabolic sub-cell fit. Jet shocks raise rho going +x
   (positive peak); the bow shock raises rho going -x (negative peak).
 - Axis: Mach disk = first and terminal shock = last positive peak between the exit and the stagnation point, counting
-  peaks of at least 25 % of the strongest. Stagnation point = last u_x zero crossing (+ to -) before the bow shock.
+  peaks of at least 25 % of the strongest. If only the Mach disk passes (SA: smeared terminal compression), the
+  strongest peak more than 0.5 mm after it is used and flagged. Stagnation point = first u_x zero crossing (+ to -)
+  after the exit (coarse meshes have further crossings from a recirculation pocket; all are in axis_u0_x).
+- *_subsonic_edge_r (second criterion, added 2026-11-04 after the test): along the same track, the r where the minimum
+  Mach within 0.3 mm behind the shock reaches 1, i.e. the end of the normal (subsonic-behind) part. The Mach disk is
+  only ~2 box cells (0.05 mm) wide on this criterion, so its value is resolution-limited.
 - Bow shock per row: the "edge" is the first x from upstream (x = 20 mm) where Mach < 97 % of that row's upstream
   Mach (the old threshold method, kept as a cross-check); the shock is the d(rho)/dx minimum within -0.5/+0.25 mm of it.
 - Radial extent of the Mach disk (triple-point estimate) and of the terminal-shock arc: follow the shock outward row by
@@ -57,27 +62,40 @@ def bow(Mrow, grow):
     return xe, vertex(x, -grow, i), Mup
 
 
-def track(G, x0, s0, sign, win=0.3):
-    """Follow a shock outward from the axis. Returns (edge r, x at the edge, r and x of the track)."""
-    rs, xs, xp = [0.0], [x0], x0
-    for j in range(1, len(r)):
+def track(G, M, x0, sign, win=0.3, behind=0.3):
+    """Follow a jet shock outward from the axis, row by row (peak within +-win of the previous row).
+    Returns per row: r, x, peak strength, min Mach within `behind` mm downstream (+x) of the shock."""
+    rs, xs, gs, mb, xp = [], [], [], [], x0
+    for j in range(len(r)):
         g = sign * G[j]
         w = np.where((np.abs(x - xp) <= win) & np.isfinite(g))[0]
         if len(w) == 0:
             break
         i = w[np.argmax(g[w])]
-        if g[i] < 0.5 * s0:   # interpolate r to the 50 % level between this row and the last one above it
-            gp = sign * G[j - 1][np.argmin(np.abs(x - xs[-1]))]
-            f = (gp - 0.5 * s0) / (gp - g[i]) if gp > g[i] else 0.0
-            return r[j - 1] + f * (r[j] - r[j - 1]), xs[-1], rs, xs
-        xp = vertex(x, g, i); rs.append(r[j]); xs.append(xp)
-    return np.nan, np.nan, rs, xs   # never dropped below 50 % inside the box
+        xp = vertex(x, g, i)
+        b = (x >= x[i]) & (x <= x[i] + behind) & np.isfinite(M[j])
+        rs.append(r[j]); xs.append(xp); gs.append(g[i]); mb.append(M[j][b].min() if b.any() else np.nan)
+    return np.array(rs), np.array(xs), np.array(gs), np.array(mb)
+
+
+def edge(rs, xs, v, level, rising):
+    """First r where v crosses `level` (rising: from below to >= level; else falling below it), linear between rows.
+    Returns (r, x of the last row before it), or NaN if it never crosses inside the box."""
+    hit = np.where(v >= level)[0] if rising else np.where(v < level)[0]
+    hit = hit[hit > 0]
+    if len(hit) == 0:
+        return np.nan, np.nan
+    k = hit[0]
+    f = (level - v[k - 1]) / (v[k] - v[k - 1]) if v[k] != v[k - 1] else 0.0
+    return rs[k - 1] + f * (rs[k] - rs[k - 1]), xs[k - 1]
 
 
 RB = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]   # bow shock shape, r in mm
 cols = ["label", "M_upstream_axis",
         "mach_disk_x", "mach_disk_M_before", "mach_disk_edge_r", "mach_disk_edge_x",
-        "terminal_shock_x", "terminal_shock_M_before", "terminal_arc_edge_r", "terminal_arc_edge_x",
+        "mach_disk_subsonic_edge_r", "mach_disk_subsonic_edge_x",
+        "terminal_shock_x", "terminal_shock_M_before", "terminal_shock_edge_r", "terminal_shock_edge_x",
+        "terminal_shock_subsonic_edge_r", "terminal_shock_subsonic_edge_x",
         "stagnation_x",
         "bow_x_axis", "bow_edge_x_axis", "bow_x_1D", "bow_edge_x_1D", "bow_x_2D", "bow_edge_x_2D",
         "standoff_bow_minus_exit_axis", "shock_layer_bow_minus_stag_axis",
@@ -92,22 +110,26 @@ for lab in labels:
     xb_edge, xb, Mup = bow(M[0], G[0])
     out.update(M_upstream_axis=Mup, bow_x_axis=xb, bow_edge_x_axis=xb_edge)
     c = np.where((x > X_EXIT) & (x < xb) & np.isfinite(u[0]) & (u[0] > 0) & (np.roll(u[0], -1) <= 0))[0]
-    xs = x[c[-1]] + h * u[0][c[-1]] / (u[0][c[-1]] - u[0][c[-1] + 1]) if len(c) else np.nan
-    if len(c) > 1:
-        flags.append(f"{len(c)} u=0 crossings on axis")
+    xs = x[c[0]] + h * u[0][c[0]] / (u[0][c[0]] - u[0][c[0] + 1]) if len(c) else np.nan   # first +x-flow end
     out["stagnation_x"] = xs
-    p = peaks(G[0], X_EXIT + 0.1, xs)
-    p = p[G[0][p] >= 0.25 * G[0][p].max()] if len(p) else p
+    pa = peaks(G[0], X_EXIT + 0.1, xs)
+    p = pa[G[0][pa] >= 0.25 * G[0][pa].max()] if len(pa) else pa
     out["n_jet_peaks"] = len(p)
+    if len(p) == 1:   # smeared terminal compression (SA): strongest peak after the Mach disk, flagged
+        q = pa[x[pa] > x[p[0]] + 0.5]
+        if len(q):
+            k = q[np.argmax(G[0][q])]
+            p = np.array([p[0], k])
+            flags.append(f"terminal compression weak/smeared ({100 * G[0][k] / G[0][p[0]]:.0f} % of Mach disk peak)")
     if len(p) >= 2:
         for name, i, lo in (("mach_disk", p[0], X_EXIT), ("terminal_shock", p[-1], x[p[-2]])):
             out[f"{name}_x"] = xi = vertex(x, G[0], i)
             w = (x >= lo) & (x < xi)
             out[f"{name}_M_before"] = np.nanmax(M[0][w])
-        er, ex, _, _ = track(G, out["mach_disk_x"], G[0][p[0]], +1)
-        out.update(mach_disk_edge_r=er, mach_disk_edge_x=ex)
-        er, ex, _, _ = track(G, out["terminal_shock_x"], G[0][p[-1]], +1)
-        out.update(terminal_arc_edge_r=er, terminal_arc_edge_x=ex)
+            rs_, xs_, gs_, mb_ = track(G, M, xi, +1)
+            out[f"{name}_edge_r"], out[f"{name}_edge_x"] = edge(rs_, xs_, gs_, 0.5 * gs_[0], rising=False)
+            out[f"{name}_subsonic_edge_r"], out[f"{name}_subsonic_edge_x"] = (
+                edge(rs_, xs_, mb_, 1.0, rising=True) if mb_[0] < 1 else (0.0, xi))
     else:
         flags.append(f"only {len(p)} jet shock peak(s) on axis")
     out["standoff_bow_minus_exit_axis"] = xb - X_EXIT
@@ -143,7 +165,8 @@ for lab in labels:
     out["flags"] = "; ".join(flags)
     rows.append(out)
     print(lab, " ".join(f"{k}={out.get(k, np.nan):.3f}" for k in
-                        ("mach_disk_x", "mach_disk_edge_r", "terminal_shock_x", "terminal_arc_edge_r", "stagnation_x",
+                        ("mach_disk_x", "mach_disk_subsonic_edge_r", "terminal_shock_x", "terminal_shock_edge_r",
+                         "terminal_shock_subsonic_edge_r", "stagnation_x",
                          "bow_x_axis", "bow_x_1D", "bow_x_2D", "sonic_rmax")), out["flags"])
 
 with open(sys.argv[2], "w") as f:
