@@ -1,0 +1,24 @@
+#!/bin/bash
+# Run one SU2_CFD stage on Gadi (normal queue, one 48-core Cascade Lake node by default).
+# Usage (resources and cost are set at qsub time; 2 SU per core-hour in normal):
+#   qsub -l walltime=HH:MM:SS -v STAGE=<stage folder>,CFG=<cfg file name> su2_stage.pbs
+#   Chain stages with: qsub -W depend=afterok:<previous job id> ...
+# Writes <cfg>.log in the stage folder, ending with "SU2_CFD exit=<rc>", the same format as the M3 chain drivers,
+# so their done_step checks still work. Pure MPI (-t 1), one rank per core. Nothing here stops a run on convergence.
+#PBS -P os85
+#PBS -q normal
+#PBS -l ncpus=48
+#PBS -l mem=190GB
+#PBS -l walltime=01:00:00
+#PBS -l storage=scratch/os85
+#PBS -N su2_stage
+#PBS -j oe
+set -u
+cd ${STAGE:?set STAGE=<stage folder>} || exit 1
+LOG=${CFG:?set CFG=<cfg file>}; LOG=${LOG%.cfg}.log
+source /scratch/os85/lp3540/su2/SU2-v8.5.0/su2_env.sh
+{ echo "host $(hostname)  ranks $PBS_NCPUS  job $PBS_JOBID"; date; } > $LOG
+mpirun -np $PBS_NCPUS SU2_CFD -t 1 $CFG >> $LOG 2>&1
+rc=$?
+echo "SU2_CFD exit=$rc  $(date)" >> $LOG
+exit $rc

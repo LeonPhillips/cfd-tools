@@ -1,0 +1,18 @@
+#!/bin/bash
+# Compile and install SU2 v8.5.0 on Gadi after su2_setup_login.sh has configured it.
+# Cost: normal queue, 2 SU per core-hour, 12 cores (48 GB = 12 cores' memory share) x 1 h = 24 SU at most.
+#PBS -P os85
+#PBS -q normal
+#PBS -l ncpus=12
+#PBS -l mem=48GB
+#PBS -l walltime=01:00:00
+#PBS -l storage=scratch/os85
+#PBS -l wd
+#PBS -N su2_build
+#PBS -j oe
+source /scratch/os85/lp3540/su2/SU2-v8.5.0/su2_env.sh
+cd $SU2_HOME
+hostname; date
+./ninja -C build -j $PBS_NCPUS install
+echo "exit=$?"; date
+ls -l $SU2_RUN/SU2_CFD
