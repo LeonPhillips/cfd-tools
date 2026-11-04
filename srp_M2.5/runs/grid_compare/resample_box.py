@@ -1,5 +1,6 @@
 """pvbatch --mesa resample_box.py <out.npz> <label=flow.vtu> ...: Mach and Density on a uniform grid over the refinement
-box x 0.5-20 mm, r 0-9.5 mm at H_MM mm (env var, default 0.01 = 1951 x 951 points). Points outside the fluid are NaN."""
+box x 0.5-20 mm, r 0-9.5 mm at H_MM mm (env var, default 0.01 = 1951 x 951 points). Points outside the fluid are NaN.
+VARS (env var, default "Mach,Density"): point arrays to keep. A vector array is stored per component as <name>_x, _y."""
 import os
 import sys
 import numpy as np
@@ -18,9 +19,13 @@ for arg in sys.argv[2:]:
     rs.SamplingDimensions = [NX, NR, 1]
     d = sm.Fetch(rs); pd = d.GetPointData()
     ok = v2n(pd.GetArray("vtkValidPointMask")).astype(bool)
-    for v in ("Mach", "Density"):
+    for v in os.environ.get("VARS", "Mach,Density").split(","):
         a = v2n(pd.GetArray(v)).astype(np.float32); a[~ok] = np.nan
-        out[f"{lab}_{v}"] = a.reshape(NR, NX)   # rows r, columns x
+        if a.ndim == 1:
+            out[f"{lab}_{v}"] = a.reshape(NR, NX)   # rows r, columns x
+        else:
+            for i, s in enumerate("xy"):
+                out[f"{lab}_{v}_{s}"] = a[:, i].reshape(NR, NX)
     out["labels"].append(lab)
     print(f"{lab}: {f}  grid {NX} x {NR}, fluid points {int(ok.sum())} of {ok.size}")
 out["labels"] = np.array(out["labels"])
