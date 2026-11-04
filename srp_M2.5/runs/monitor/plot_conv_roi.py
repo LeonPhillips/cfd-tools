@@ -74,7 +74,7 @@ if p is not None and p.size:
         ax[0, 2].semilogy(p[:, 0], top, "D-", ms=3, label="mean |dMach| of the top 1 % (>= p99)")
     ax[0, 2].semilogy(p[:, 0], p[:, 4], "^--", ms=3, label="mean |drho|/rho [%]")
     ax[0, 2].legend(fontsize=8)
-    ax[0, 2].set_title(f"jet box x 1.5-8.5, r 0-3.6 mm: change per 1000 iterations\n"
+    ax[0, 2].set_title(f"box x {MAP[0]:g}-{MAP[1]:g}, r {MAP[2]:g}-{MAP[3]:g} mm: change per 1000 iterations\n"
                        f"latest: mean |dM| {p[-1, 2]:.2e}, p99 {p[-1, 3]:.2e}, top-1 % mean {top[-1]:.2e}, "
                        f"mean |drho|/rho {p[-1, 4]:.2e} %", fontsize=9)
 else:
@@ -109,7 +109,7 @@ if len(snaps) >= 2:
                      colors="k", linewidths=0.4, alpha=0.5)
     for q, (x, r, _) in PROBES.items():
         ax[1, 2].plot(x, r, "x", color="g", ms=7, mew=1.5, clip_on=False)
-        ax[1, 2].annotate(q, (x, r), (3, 3), textcoords="offset points", color="g", fontsize=8)
+        ax[1, 2].annotate(q, (x, r), (-14, 4) if q.startswith("up") else (4, 4), textcoords="offset points", color="g", fontsize=7)
     side = lambda f: ("prev. stage " if prev and f.startswith(prev) else "") + str(key(f))
     ax[1, 2].set_title(f"Mach, snapshot {side(snaps[-1])} minus {side(snaps[-2])}   max |dM| {np.nanmax(np.abs(d)):.2e}\n"
                        f"(grey: current Mach 1, 2, 2.5, 3)", fontsize=9)
