@@ -11,9 +11,11 @@ D = 4.6 mm. Definitions (user-approved plan, 2026-11-04):
 - Bow shock per row: the "edge" is the first x from upstream (x = 20 mm) where Mach < 97 % of that row's upstream
   Mach (the old threshold method, kept as a cross-check); the shock is the d(rho)/dx minimum within -0.5/+0.25 mm of it.
 - Radial extent of the Mach disk (triple-point estimate) and of the terminal-shock arc: follow the shock outward row by
-  row (peak within +-0.3 mm of the previous row); the edge is the first r where the peak is below 50 % of its axis value.
-- Jet sonic-line max radius: the supersonic region connected to the nozzle exit on the axis; its largest r for x below
-  the stagnation point.
+  row (peak within +-0.3 mm of the previous row); the edge is the r where the peak falls to 50 % of its axis value
+  (linear between rows).
+- Jet sonic-line max radius: per x column from the exit to the terminal shock, the outer M = 1 edge of the first
+  supersonic band out from the axis; the largest r and its x.
+- axis_u0_x: every u_x sign change on the axis between the exit and the bow shock; (+/-) = +x flow ends there.
 """
 import sys
 import numpy as np
@@ -64,22 +66,12 @@ def track(G, x0, s0, sign, win=0.3):
         if len(w) == 0:
             break
         i = w[np.argmax(g[w])]
-        if g[i] < 0.5 * s0:
-            return r[j], xs[-1], rs, xs
+        if g[i] < 0.5 * s0:   # interpolate r to the 50 % level between this row and the last one above it
+            gp = sign * G[j - 1][np.argmin(np.abs(x - xs[-1]))]
+            f = (gp - 0.5 * s0) / (gp - g[i]) if gp > g[i] else 0.0
+            return r[j - 1] + f * (r[j] - r[j - 1]), xs[-1], rs, xs
         xp = vertex(x, g, i); rs.append(r[j]); xs.append(xp)
     return np.nan, np.nan, rs, xs   # never dropped below 50 % inside the box
-
-
-def connected(mask, seed):
-    """Region of mask 4-connected to seed (iterative dilation)."""
-    reg = np.zeros_like(mask); reg[seed] = mask[seed]
-    while True:
-        n = reg.copy()
-        n[1:] |= reg[:-1]; n[:-1] |= reg[1:]; n[:, 1:] |= reg[:, :-1]; n[:, :-1] |= reg[:, 1:]
-        n &= mask
-        if (n == reg).all():
-            return reg
-        reg = n
 
 
 RB = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]   # bow shock shape, r in mm
@@ -89,7 +81,7 @@ cols = ["label", "M_upstream_axis",
         "stagnation_x",
         "bow_x_axis", "bow_edge_x_axis", "bow_x_1D", "bow_edge_x_1D", "bow_x_2D", "bow_edge_x_2D",
         "standoff_bow_minus_exit_axis", "shock_layer_bow_minus_stag_axis",
-        "sonic_rmax", "sonic_rmax_x"] + [f"bow_x_r{v}" for v in RB] + ["n_jet_peaks", "flags"]
+        "sonic_rmax", "sonic_rmax_x"] + [f"bow_x_r{v}" for v in RB] + ["n_jet_peaks", "axis_u0_x", "flags"]
 rows = []
 for lab in labels:
     M, rho, u = z[f"{lab}_Mach"], z[f"{lab}_Density"], z[f"{lab}_Velocity_x"]
@@ -127,15 +119,27 @@ for lab in labels:
     for rv in RB:
         j = int(round(rv / (r[1] - r[0])))
         out[f"bow_x_r{rv}"] = bow(M[j], G[j])[1]
-    # jet sonic line
-    sup = np.isfinite(M) & (M > 1.0)
-    i0 = int(np.searchsorted(x, X_EXIT + 0.05))
-    reg = connected(sup, (0, i0))
-    if (reg & (x[None, :] > xb)).any():
-        flags.append("jet supersonic region reaches the freestream")
-    js, jx = np.where(reg & (x[None, :] < xs))
-    if len(js):
-        k = np.argmax(js); out.update(sonic_rmax=r[js[k]], sonic_rmax_x=x[jx[k]])
+    # jet sonic line: per column, outer edge of the first supersonic band out from the axis, exit to terminal shock
+    # (the jet core joins an outer supersonic region at large r, so a connected-region search leaks; 2026-11-04 test)
+    best = (np.nan, np.nan)
+    for c in np.where((x >= X_EXIT + 0.05) & (x <= out.get("terminal_shock_x", xs)))[0]:
+        s = np.isfinite(M[:, c]) & (M[:, c] > 1.0)
+        on = np.where(s)[0]
+        if len(on) == 0:
+            continue
+        off = np.where(~s[on[0]:])[0]
+        if len(off) == 0:
+            flags.append(f"sonic band reaches the box top at x={x[c]:.2f}"); break
+        j = on[0] + off[0]   # first subsonic row
+        rj = r[j - 1] + (r[j] - r[j - 1]) * (M[j - 1, c] - 1.0) / (M[j - 1, c] - M[j, c])
+        if not rj <= best[0]:
+            best = (rj, x[c])
+    out.update(sonic_rmax=best[0], sonic_rmax_x=best[1])
+    # every u_x sign change on the axis between the exit and the bow shock
+    w = np.where((x > X_EXIT) & (x < xb))[0]
+    out["axis_u0_x"] = " ".join(f"{x[i] + h * u[0][i] / (u[0][i] - u[0][i + 1]):.3f}({'+/-' if u[0][i] > 0 else '-/+'})"
+                                for i in w[:-1] if np.isfinite(u[0][i]) and np.isfinite(u[0][i + 1])
+                                and np.sign(u[0][i]) != np.sign(u[0][i + 1]))
     out["flags"] = "; ".join(flags)
     rows.append(out)
     print(lab, " ".join(f"{k}={out.get(k, np.nan):.3f}" for k in
@@ -149,6 +153,6 @@ with open(sys.argv[2], "w") as f:
     f.write(",".join(["model", "inlet", "mesh", "stage"] + cols[1:]) + "\n")
     for o in rows:
         parts = (o["label"].split("__") + ["", "", "", ""])[:4]
-        f.write(",".join(parts + [o[k] if k == "flags" else
+        f.write(",".join(parts + [o[k] if k in ("flags", "axis_u0_x") else
                          (str(o[k]) if k == "n_jet_peaks" else f"{o.get(k, np.nan):.4f}") for k in cols[1:]]) + "\n")
 print("saved", sys.argv[2])
