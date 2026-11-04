@@ -31,12 +31,12 @@ echo "copied from cfd-tools $(git -C $SRC rev-parse HEAD) on $(date)" > $R/${NEW
 INLET='MARKER_INLET= ( inlet_jet, 288.15, 700000.0, 1.0, 0.0, 0.0 )   % p0j 7.0 bar (total), T0j 288.15 K (user, 2026-11-04)'
 NOTE='% Phase 2: inlet_jet is a total-conditions inlet, p0j = 7.0 bar, T0j = 288.15 K, flow in +x (user 2026-11-04).'
 edit() {  # edit <header line> <source cfg> <mesh file>: the common changes, to stdout
-  sed -e "1s|.*|$1|" \
-      -e "s|$OLD|$NEW|g" \
+  sed -e "s|$OLD|$NEW|g" \
       -e "s|^% Nothing stops on convergence. Made by.*|% Nothing stops on convergence. Made by ../../../${NEW}_tools/setup_p0j7.0.sh from the $OLD configs.|" \
       -e "s|^% Phase 2: inlet_jet is.*|$NOTE|" \
       -e "s|^MARKER_INLET=.*|$INLET|" \
-      -e "s|^MESH_FILENAME=.*|MESH_FILENAME= $3|" $2
+      -e "s|^MESH_FILENAME=.*|MESH_FILENAME= $3|" \
+      -e "1s|.*|$1|" $2   # header last, so it keeps the old case name where it names the source
 }
 cd $R
 for m in $MESHES; do
