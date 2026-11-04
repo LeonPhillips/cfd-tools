@@ -8,8 +8,8 @@ Default convergence check for new runs (see the Simulation folder's `.claude/rul
 | File | Content |
 |---|---|
 | `convergence.png` | Residuals, probe Mach, box change, mass flows, CFL, Mach difference map (x 0-16, r 0-6 mm) |
-| `conv_lines.png` | mean / p99 \|dMach\| per 1000 it on each line + latest vs previous Mach on each line |
-| `conv_features.png` | Mach disk x and r, shock crossing x, bow shock x (axis, 1 D, 2 D), stagnation x |
+| `conv_lines.png` | Mach along each of the six lines, latest vs previous snapshot (mean / p99 / max \|dMach\| in the titles) |
+| `conv_features.png` | 2x2 against iteration: Mach disk x, Mach disk r, bow shock x, stagnation x (all logged in features.csv) |
 | `box_change.csv`, `line_change.csv`, `features.csv` | One row per snapshot (a few kB in all) |
 
 Each PNG is also copied to the run folder as `*_latest.png`.
@@ -30,8 +30,7 @@ Each PNG is also copied to the run folder as `*_latest.png`.
    - add `CUSTOM` to `HISTORY_OUTPUT`
    - `CUSTOM_OUTPUTS= '<line printed by probes_md.py>'`
 2. **Probes:** run `pvbatch --mesa probes_md.py <starting solution flow.vtu>` (on a compute node). It places probes
-   0.3 mm upstream and 0.1 mm behind the Mach disk at r = 0, 1 and 2 mm, with the axis one capped half-way to the
-   stagnation point.
+   1 mm upstream and 1 mm behind the Mach disk at r = 0, 1 and 2 mm (user, 2026-11-04).
 3. **Watcher:** start it next to SU2: `(sleep 30; PREV=<previous stage or -> bash <clone>/srp_M2.5/runs/monitor/watch_conv.sh <stage>) &`
 
 ## Files
