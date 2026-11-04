@@ -4,6 +4,7 @@ For the stage's snapshots (<stage>/snaps/flow_*.npz) it appends to three small l
   old jet-box log: iter, n_iter, mean_dMach, p99_dMach, mean_drho_pct, top1_mean_dMach).
 - line_change.csv: per convergence line, mean / p99 / max |dMach| per 1000 iterations against the previous snapshot.
 - features.csv: key-feature positions of each snapshot (feature_positions.py definitions), mm.
+It also adds each snapshot's line Mach to line_history.npz (all snapshots of the stage, for plot_conv_lines.py).
 Then it deletes all but the latest two snapshots. The first snapshot of a stage is compared with the previous stage's
 latest snapshot (the solution it restarted from), if that one has the same format.
 """
@@ -86,6 +87,24 @@ if snaps:
                 fp.set_grid(z["x_mm"], z["r_mm"])
                 o = fp.features(z["Mach"].astype(float), z["Density"].astype(float), z["Velocity_x"].astype(float))
             ff.write(f"{key(s)}," + ",".join(f"{o.get(c, np.nan):.4f}" for c in FEAT) + f",{o['flags']}\n")
+
+    # line history (user, 2026-11-04: plot the lines of every snapshot): Mach on the lines of each snapshot, kept for the
+    # whole stage in <stage>/line_history.npz (~48 kB per snapshot), while the full snapshots are pruned below
+    hf = f"{folder}/line_history.npz"
+    its, lm = [], []
+    if os.path.exists(hf):
+        with np.load(hf) as h:
+            its, lm = list(h["iter"]), list(h["line_Mach"])
+    new = [s for s in snaps if key(s) not in set(int(i) for i in its)]
+    if new:
+        for s in new:
+            with np.load(s) as z:
+                its.append(key(s)); lm.append(z["line_Mach"].astype(np.float32))
+                lines_mm, line_names = z["lines_mm"], z["line_names"]
+        o = np.argsort(its)
+        np.savez_compressed(hf + ".tmp.npz", iter=np.array(its)[o], line_Mach=np.array(lm)[o],
+                            lines_mm=lines_mm, line_names=line_names)
+        os.replace(hf + ".tmp.npz", hf)
 
 for f in snaps[:-2]:
     os.remove(f)
