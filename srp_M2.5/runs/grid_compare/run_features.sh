@@ -3,7 +3,8 @@
 # SST MASS_FLOW rho 8.681 (coarse, fineJet), and the p0j 8.015 bar SST, SST-Sarkar and SA mesh studies.
 # Final stage = the run's only 2_jet_staged/*_cap3. Resamples a 0.025 mm box with Mach, Density, Velocity, then runs
 # feature_positions.py. Run on a compute node (e.g. the desktop job): bash run_features.sh [label-filter regex]
-# Output: $R/grid_compare/features/ (box_features_0.025mm.npz, feature_positions.csv, features.log)
+# Output: $R/grid_compare/features/ (box_features_all_0.025mm.npz, feature_positions_all.csv, features.log)
+# MODE=machdisk TAG=sst bash run_features.sh '^SST': 0.005 mm box x 4-5, r 0-0.5 mm and machdisk_fine.py -> machdisk_fine_sst.csv
 TOOLS=$(dirname $(readlink -f $0))
 R=/scratch/qk75/LeonPhillips/PhD/cfd/su2/cases/srp_M2.5/runs
 O=$R/grid_compare/features; mkdir -p $O; cd $O
@@ -27,11 +28,20 @@ add SST_p0j8.015_p0inf3.247 SST p0j8.015 Coarse Medium Fine FineJet FineJet2 Ver
 add SSTsarkar_p0j8.015_p0inf3.247 SSTsarkar p0j8.015 Coarse Medium Fine FineJet FineJet2 VeryFine
 add SA_p0j8.015_p0inf3.247 SA p0j8.015 Coarse Medium Fine FineNozzle FineJet FineJet2 VeryFine
 echo "${#ARGS[@]} solutions"; printf '  %s\n' "${ARGS[@]}"
-TAG=$([ "$FILTER" = . ] && echo all || echo test)
+TAG=${TAG:-$([ "$FILTER" = . ] && echo all || echo test)}
+if [ "$MODE" = machdisk ]; then   # MODE=machdisk: fine box around the Mach disk only (machdisk_fine.py)
+  NPZ=box_machdisk_${TAG}_0.005mm.npz; export BOX=4.0,5.0,0.0,0.5 H_MM=0.005 VARS=Mach,Density
+else
+  NPZ=box_features_${TAG}_0.025mm.npz; export VARS=Mach,Density,Velocity H_MM=0.025
+fi
 ( unset LD_PRELOAD; module load paraview/5.13 >/dev/null 2>&1
-  VARS=Mach,Density,Velocity H_MM=0.025 pvbatch --mesa $TOOLS/resample_box.py box_features_${TAG}_0.025mm.npz "${ARGS[@]}" 2>&1 | grep -vi warning )
-[ -s box_features_${TAG}_0.025mm.npz ] || { echo "RESAMPLE FAILED"; exit 1; }
+  pvbatch --mesa $TOOLS/resample_box.py $NPZ "${ARGS[@]}" 2>&1 | grep -vi warning )
+[ -s $NPZ ] || { echo "RESAMPLE FAILED"; exit 1; }
 source /scratch/qk75/LeonPhillips/PhD/cfd/su2/SU2-v8.5.0/su2_env.sh >/dev/null
-python $TOOLS/feature_positions.py box_features_${TAG}_0.025mm.npz feature_positions_${TAG}.csv
+if [ "$MODE" = machdisk ]; then
+  python $TOOLS/machdisk_fine.py $NPZ machdisk_fine_${TAG}.csv
+else
+  python $TOOLS/feature_positions.py $NPZ feature_positions_${TAG}.csv
+fi
 ls -l $O
 echo "== done $(date)"

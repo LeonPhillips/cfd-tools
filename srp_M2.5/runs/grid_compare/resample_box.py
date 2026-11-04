@@ -1,13 +1,14 @@
 """pvbatch --mesa resample_box.py <out.npz> <label=flow.vtu> ...: Mach and Density on a uniform grid over the refinement
 box x 0.5-20 mm, r 0-9.5 mm at H_MM mm (env var, default 0.01 = 1951 x 951 points). Points outside the fluid are NaN.
-VARS (env var, default "Mach,Density"): point arrays to keep. A vector array is stored per component as <name>_x, _y."""
+VARS (env var, default "Mach,Density"): point arrays to keep. A vector array is stored per component as <name>_x, _y.
+BOX (env var, "x0,x1,r0,r1" in mm, default the refinement box above): a different sampling box."""
 import os
 import sys
 import numpy as np
 from paraview.simple import XMLUnstructuredGridReader, ResampleToImage
 from paraview import servermanager as sm
 from vtk.util.numpy_support import vtk_to_numpy as v2n
-X0, X1, R0, R1 = 0.5, 20.0, 0.0, 9.5
+X0, X1, R0, R1 = (float(v) for v in os.environ.get("BOX", "0.5,20.0,0.0,9.5").split(","))
 H = float(os.environ.get("H_MM", "0.01"))
 NX, NR = int(round((X1 - X0) / H)) + 1, int(round((R1 - R0) / H)) + 1
 out = {"x_mm": np.linspace(X0, X1, NX), "r_mm": np.linspace(R0, R1, NR), "labels": []}
