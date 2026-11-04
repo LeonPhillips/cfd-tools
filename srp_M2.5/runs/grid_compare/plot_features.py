@@ -1,8 +1,9 @@
-"""python plot_features.py <feature_positions_all.csv> <machdisk_fine_sst.csv> <out_prefix>
+"""python plot_features.py <feature_positions_all.csv> <out_prefix>
 Mach disk x and r, bow shock x and stagnation x (all on the axis except r) against mesh for the SST cases
 (user, 2026-11-04). Writes <out_prefix>.png (matplotlib, 2x2) and <out_prefix>.xlsx (data, native Excel charts, notes).
-Mach disk x and r come from the 0.005 mm box (machdisk_fine.py); r is the subsonic-behind edge. Bow shock and
-stagnation come from the 0.025 mm box (feature_positions.py). Mesh axis: ordered categories.
+All from feature_positions.py (0.025 mm box). Mach disk = the normal jet shock at ~8.6 mm (user, 2026-11-04; the
+~4.5 mm barrel-shock crossing was mislabelled as the Mach disk in the first version). Mach disk r = subsonic-behind
+edge. Mesh axis: ordered categories.
 """
 import math
 import sys
@@ -22,18 +23,16 @@ SERIES = [("SST", "p0j7.4945", "SST, p0j 7.4945 bar (total conditions)", "#1f77b
           ("SST", "massflow_rhoj8.681", "SST, MASS_FLOW (rho 8.681, V 99.11)", "#2ca02c", "s", "--"),
           ("SST", "p0j8.015", "SST, p0j 8.015 bar (old inlet)", "#ff7f0e", "^", "-"),
           ("SSTsarkar", "p0j8.015", "SST-Sarkar, p0j 8.015 bar (old inlet)", "#d62728", "v", "-")]
-QUANT = [("mach_disk_x_fine", "Mach disk x on the axis (mm)", "Mach disk x"),
-         ("mach_disk_subsonic_edge_r_fine", "Mach disk radius r (mm)", "Mach disk r"),
+QUANT = [("mach_disk_x", "Mach disk x on the axis (mm)", "Mach disk x"),
+         ("mach_disk_subsonic_edge_r", "Mach disk radius r (mm)", "Mach disk r"),
          ("bow_x_axis", "Bow shock x on the axis (mm)", "Bow shock x"),
          ("stagnation_x", "Stagnation point x on the axis (mm)", "Stagnation x")]
 
-f = pd.read_csv(sys.argv[1], comment="#")
-m = pd.read_csv(sys.argv[2], comment="#")
-d = f.merge(m, on=["model", "inlet", "mesh", "stage"], how="inner")
+d = pd.read_csv(sys.argv[1], comment="#")
 d = d[d.model.isin(["SST", "SSTsarkar"])].copy()
 d["mesh"] = pd.Categorical(d.mesh, MESHES, ordered=True)
 d = d.sort_values(["model", "inlet", "mesh"])
-out = sys.argv[3]
+out = sys.argv[2]
 
 
 def table(col):
@@ -98,7 +97,7 @@ for (col, ylab, title), anc in zip(QUANT, anchors):
     ch.y_axis.scaling.min = math.floor(lo / step + 1e-9) * step
     ch.y_axis.scaling.max = math.ceil(hi / step + 1e-9) * step
     ch.y_axis.majorUnit = step
-    ch.y_axis.number_format = "0.000" if col.startswith("mach_disk") else "0.00"
+    ch.y_axis.number_format = "0.00"
     ch.x_axis.delete = False; ch.y_axis.delete = False
     ch.x_axis.tickLblPos = "low"
     ch.legend.position = "b"; ch.legend.overlay = False
@@ -131,12 +130,15 @@ notes = [
     "srp_M2.5 feature positions vs mesh, SST cases (user request 2026-11-04). All values in mm; x from the CFD origin "
     "(nozzle exit at x = 1.875 mm), r radial. Jet flows +x, freestream -x.",
     "Source: final solutions (coarse t4_cap3 where it exists, else t3_cap3) on M3, "
-    "runs/grid_compare/features/ (feature_positions_all.csv, machdisk_fine_sst.csv). Scripts: cfd-tools "
-    "srp_M2.5/runs/grid_compare/ (feature_positions.py, machdisk_fine.py, plot_features.py).",
-    "Mach disk x: largest positive d(rho)/dx peak on the axis, parabolic sub-cell fit, 0.005 mm box (x 4-5, r 0-0.5 mm).",
-    "Mach disk r: r where the minimum Mach within 0.3 mm behind the tracked shock reaches 1 (end of the subsonic-behind "
-    "part), same 0.005 mm box. 0 = no Mach disk (flow behind the shock supersonic on the axis; all coarse meshes). "
-    "Sampling finer than the mesh only interpolates, so this is mesh-limited.",
+    "runs/grid_compare/features/feature_positions_all_v2.csv. Scripts: cfd-tools "
+    "srp_M2.5/runs/grid_compare/ (feature_positions.py, plot_features.py).",
+    "Mach disk: the normal jet shock at x ~ 8.6 mm (user, 2026-11-04). The first jet shock on the axis at ~4.5 mm is "
+    "the barrel-shock crossing (regular reflection), not the Mach disk; it is in 'All SST features' as shock_crossing_*.",
+    "Mach disk x: d(rho)/dx peak on the axis (the last jet shock of at least 25 % of the strongest peak before the "
+    "stagnation point), parabolic sub-cell fit, 0.025 mm box.",
+    "Mach disk r: the shock is followed outward row by row; r where the minimum Mach within 0.3 mm behind it reaches 1 "
+    "(end of the subsonic-behind, normal part; triple-point estimate). The 50 %-of-axis-strength edge "
+    "(mach_disk_edge_r) is also in 'All SST features' but is fragile.",
     "Bow shock x: d(rho)/dx minimum on the axis near the point where Mach first drops below 97 % of the upstream value, "
     "0.025 mm box.",
     "Stagnation x: first u_x zero crossing (+ to -) on the axis after the nozzle exit, 0.025 mm box. Coarse meshes have "

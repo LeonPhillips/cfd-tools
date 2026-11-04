@@ -4,7 +4,8 @@
 # Final stage = the run's only 2_jet_staged/*_cap3. Resamples a 0.025 mm box with Mach, Density, Velocity, then runs
 # feature_positions.py. Run on a compute node (e.g. the desktop job): bash run_features.sh [label-filter regex]
 # Output: $R/grid_compare/features/ (box_features_all_0.025mm.npz, feature_positions_all.csv, features.log)
-# MODE=machdisk TAG=sst bash run_features.sh '^SST': 0.005 mm box x 4-5, r 0-0.5 mm and machdisk_fine.py -> machdisk_fine_sst.csv
+# MODE=crossing TAG=sst bash run_features.sh '^SST': 0.005 mm box x 4-5, r 0-0.5 mm around the barrel-shock crossing
+#   and crossing_fine.py -> crossing_fine_sst.csv (first run 2026-11-04 as MODE=machdisk: machdisk_fine_sst.csv)
 TOOLS=$(dirname $(readlink -f $0))
 R=/scratch/qk75/LeonPhillips/PhD/cfd/su2/cases/srp_M2.5/runs
 O=$R/grid_compare/features; mkdir -p $O; cd $O
@@ -29,8 +30,8 @@ add SSTsarkar_p0j8.015_p0inf3.247 SSTsarkar p0j8.015 Coarse Medium Fine FineJet 
 add SA_p0j8.015_p0inf3.247 SA p0j8.015 Coarse Medium Fine FineNozzle FineJet FineJet2 VeryFine
 echo "${#ARGS[@]} solutions"; printf '  %s\n' "${ARGS[@]}"
 TAG=${TAG:-$([ "$FILTER" = . ] && echo all || echo test)}
-if [ "$MODE" = machdisk ]; then   # MODE=machdisk: fine box around the Mach disk only (machdisk_fine.py)
-  NPZ=box_machdisk_${TAG}_0.005mm.npz; export BOX=4.0,5.0,0.0,0.5 H_MM=0.005 VARS=Mach,Density
+if [ "$MODE" = crossing ]; then   # fine box around the barrel-shock crossing only (crossing_fine.py)
+  NPZ=box_crossing_${TAG}_0.005mm.npz; export BOX=4.0,5.0,0.0,0.5 H_MM=0.005 VARS=Mach,Density
 else
   NPZ=box_features_${TAG}_0.025mm.npz; export VARS=Mach,Density,Velocity H_MM=0.025
 fi
@@ -38,8 +39,8 @@ fi
   pvbatch --mesa $TOOLS/resample_box.py $NPZ "${ARGS[@]}" 2>&1 | grep -vi warning )
 [ -s $NPZ ] || { echo "RESAMPLE FAILED"; exit 1; }
 source /scratch/qk75/LeonPhillips/PhD/cfd/su2/SU2-v8.5.0/su2_env.sh >/dev/null
-if [ "$MODE" = machdisk ]; then
-  python $TOOLS/machdisk_fine.py $NPZ machdisk_fine_${TAG}.csv
+if [ "$MODE" = crossing ]; then
+  python $TOOLS/crossing_fine.py $NPZ crossing_fine_${TAG}.csv
 else
   python $TOOLS/feature_positions.py $NPZ feature_positions_${TAG}.csv
 fi

@@ -6,19 +6,22 @@ Coordinates: x along the axis (jet flows +x, freestream flows -x), r radial, bot
 D = 4.6 mm. Definitions (user-approved plan, 2026-11-04):
 - Shocks sit at the peak of d(rho)/dx along a line, with a parabolic sub-cell fit. Jet shocks raise rho going +x
   (positive peak); the bow shock raises rho going -x (negative peak).
-- Axis: Mach disk = first and terminal shock = last positive peak between the exit and the stagnation point, counting
-  peaks of at least 25 % of the strongest. If only the Mach disk passes (SA: smeared terminal compression), the
+- Naming (corrected by the user, 2026-11-04): the first strong jet shock on the axis (~4.5 mm) is where the barrel
+  (incident) shocks cross the axis, a regular reflection: shock_crossing_*. The normal shock further out (~8.6 mm,
+  called "terminal shock" in the first version) is the Mach disk: mach_disk_*.
+- Axis: shock crossing = first and Mach disk = last positive peak between the exit and the stagnation point, counting
+  peaks of at least 25 % of the strongest. If only the crossing passes (SA: smeared Mach-disk compression), the
   strongest peak more than 0.5 mm after it is used and flagged. Stagnation point = first u_x zero crossing (+ to -)
   after the exit (coarse meshes have further crossings from a recirculation pocket; all are in axis_u0_x).
 - *_subsonic_edge_r (second criterion, added 2026-11-04 after the test): along the same track, the r where the minimum
-  Mach within 0.3 mm behind the shock reaches 1, i.e. the end of the normal (subsonic-behind) part. The Mach disk is
-  only ~2 box cells (0.05 mm) wide on this criterion, so its value is resolution-limited.
+  Mach within 0.3 mm behind the shock reaches 1, i.e. the end of the normal (subsonic-behind) part. For the shock
+  crossing this is only ~0.05 mm (a tiny normal stem, or 0 on coarse meshes).
 - Bow shock per row: the "edge" is the first x from upstream (x = 20 mm) where Mach < 97 % of that row's upstream
   Mach (the old threshold method, kept as a cross-check); the shock is the d(rho)/dx minimum within -0.5/+0.25 mm of it.
-- Radial extent of the Mach disk (triple-point estimate) and of the terminal-shock arc: follow the shock outward row by
+- Radial extent of the shock crossing and of the Mach disk (triple-point estimate): follow the shock outward row by
   row (peak within +-0.3 mm of the previous row); *_edge_r is the r where the peak falls to 50 % of its axis value
-  (linear between rows). Fragile: the terminal-shock strength off the axis hovers near 55-60 % of the axis value.
-- Jet sonic-line max radius: per x column from the exit to the terminal shock, the outer M = 1 edge of the first
+  (linear between rows). Fragile: the Mach-disk strength off the axis hovers near 55-60 % of the axis value.
+- Jet sonic-line max radius: per x column from the exit to the Mach disk, the outer M = 1 edge of the first
   supersonic band out from the axis; the largest r and its x.
 - axis_u0_x: every u_x sign change on the axis between the exit and the bow shock; (+/-) = +x flow ends there.
 """
@@ -92,10 +95,10 @@ def edge(rs, xs, v, level, rising):
 
 RB = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]   # bow shock shape, r in mm
 cols = ["label", "M_upstream_axis",
+        "shock_crossing_x", "shock_crossing_M_before", "shock_crossing_edge_r", "shock_crossing_edge_x",
+        "shock_crossing_subsonic_edge_r", "shock_crossing_subsonic_edge_x",
         "mach_disk_x", "mach_disk_M_before", "mach_disk_edge_r", "mach_disk_edge_x",
         "mach_disk_subsonic_edge_r", "mach_disk_subsonic_edge_x",
-        "terminal_shock_x", "terminal_shock_M_before", "terminal_shock_edge_r", "terminal_shock_edge_x",
-        "terminal_shock_subsonic_edge_r", "terminal_shock_subsonic_edge_x",
         "stagnation_x",
         "bow_x_axis", "bow_edge_x_axis", "bow_x_1D", "bow_edge_x_1D", "bow_x_2D", "bow_edge_x_2D",
         "standoff_bow_minus_exit_axis", "shock_layer_bow_minus_stag_axis",
@@ -115,14 +118,14 @@ for lab in labels:
     pa = peaks(G[0], X_EXIT + 0.1, xs)
     p = pa[G[0][pa] >= 0.25 * G[0][pa].max()] if len(pa) else pa
     out["n_jet_peaks"] = len(p)
-    if len(p) == 1:   # smeared terminal compression (SA): strongest peak after the Mach disk, flagged
+    if len(p) == 1:   # smeared Mach-disk compression (SA): strongest peak after the crossing, flagged
         q = pa[x[pa] > x[p[0]] + 0.5]
         if len(q):
             k = q[np.argmax(G[0][q])]
             p = np.array([p[0], k])
-            flags.append(f"terminal compression weak/smeared ({100 * G[0][k] / G[0][p[0]]:.0f} % of Mach disk peak)")
+            flags.append(f"Mach disk compression weak/smeared ({100 * G[0][k] / G[0][p[0]]:.0f} % of crossing peak)")
     if len(p) >= 2:
-        for name, i, lo in (("mach_disk", p[0], X_EXIT), ("terminal_shock", p[-1], x[p[-2]])):
+        for name, i, lo in (("shock_crossing", p[0], X_EXIT), ("mach_disk", p[-1], x[p[-2]])):
             out[f"{name}_x"] = xi = vertex(x, G[0], i)
             w = (x >= lo) & (x < xi)
             out[f"{name}_M_before"] = np.nanmax(M[0][w])
@@ -141,10 +144,10 @@ for lab in labels:
     for rv in RB:
         j = int(round(rv / (r[1] - r[0])))
         out[f"bow_x_r{rv}"] = bow(M[j], G[j])[1]
-    # jet sonic line: per column, outer edge of the first supersonic band out from the axis, exit to terminal shock
+    # jet sonic line: per column, outer edge of the first supersonic band out from the axis, exit to Mach disk
     # (the jet core joins an outer supersonic region at large r, so a connected-region search leaks; 2026-11-04 test)
     best = (np.nan, np.nan)
-    for c in np.where((x >= X_EXIT + 0.05) & (x <= out.get("terminal_shock_x", xs)))[0]:
+    for c in np.where((x >= X_EXIT + 0.05) & (x <= out.get("mach_disk_x", xs)))[0]:
         s = np.isfinite(M[:, c]) & (M[:, c] > 1.0)
         on = np.where(s)[0]
         if len(on) == 0:
@@ -165,8 +168,8 @@ for lab in labels:
     out["flags"] = "; ".join(flags)
     rows.append(out)
     print(lab, " ".join(f"{k}={out.get(k, np.nan):.3f}" for k in
-                        ("mach_disk_x", "mach_disk_subsonic_edge_r", "terminal_shock_x", "terminal_shock_edge_r",
-                         "terminal_shock_subsonic_edge_r", "stagnation_x",
+                        ("shock_crossing_x", "shock_crossing_subsonic_edge_r", "mach_disk_x", "mach_disk_edge_r",
+                         "mach_disk_subsonic_edge_r", "stagnation_x",
                          "bow_x_axis", "bow_x_1D", "bow_x_2D", "sonic_rmax")), out["flags"])
 
 with open(sys.argv[2], "w") as f:

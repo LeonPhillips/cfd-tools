@@ -1,12 +1,14 @@
-"""python machdisk_fine.py <box.npz> <out.csv>
-Mach-disk position and radius from a fine box around it (run_features.sh MODE=machdisk: x 4-5 mm, r 0-0.5 mm,
-0.005 mm), because on the 0.025 mm box the disk is only ~2 cells wide (user default, 2026-11-04).
+"""python crossing_fine.py <box.npz> <out.csv>
+Position and normal-stem radius of the barrel-shock crossing on the axis (~4.5 mm) from a fine box around it
+(run_features.sh MODE=crossing: x 4-5 mm, r 0-0.5 mm, 0.005 mm). Written as machdisk_fine.py; renamed 2026-11-04 when
+the user pointed out that this feature is the shock crossing (regular reflection) and the Mach disk is the normal
+shock at ~8.6 mm (feature_positions.py mach_disk_*). The 2026-11-04 run output machdisk_fine_sst.csv uses the old names.
 Same definitions as feature_positions.py:
-- mach_disk_x: largest positive d(rho)/dx peak on the axis (parabolic sub-cell fit).
+- shock_crossing_x: largest positive d(rho)/dx peak on the axis (parabolic sub-cell fit).
 - Track the shock outward row by row (peak within +-WIN mm of the previous row).
-- mach_disk_subsonic_edge_r: r where the minimum Mach within BEHIND mm downstream of the shock reaches 1 (0 if the flow
-  behind the shock is supersonic on the axis already, i.e. no Mach disk).
-- mach_disk_edge_r: r where the peak falls to 50 % of its axis value.
+- shock_crossing_subsonic_edge_r: r where the minimum Mach within BEHIND mm downstream of the shock reaches 1 (0 if the flow
+  behind the shock is supersonic on the axis already, i.e. no normal stem).
+- shock_crossing_edge_r: r where the peak falls to 50 % of its axis value.
 Sampling finer than the mesh only interpolates, so on coarse meshes the value is still mesh-limited.
 """
 import sys
@@ -55,8 +57,8 @@ for lab in [str(s) for s in z["labels"]]:
     print(f"{lab}: x={x0:.4f} subsonic_edge_r={sub:.4f} edge50_r={g50:.4f} M_behind_axis={mb[0]:.3f}")
 
 with open(sys.argv[2], "w") as f:
-    f.write(f"# Mach disk from machdisk_fine.py (cfd-tools); box x {x[0]}-{x[-1]} mm, r {r[0]}-{r[-1]} mm at {h:.4f} mm\n")
-    f.write("model,inlet,mesh,stage,mach_disk_x_fine,mach_disk_subsonic_edge_r_fine,mach_disk_edge_r_fine,"
+    f.write(f"# Shock crossing from crossing_fine.py (cfd-tools); box x {x[0]}-{x[-1]} mm, r {r[0]}-{r[-1]} mm at {h:.4f} mm\n")
+    f.write("model,inlet,mesh,stage,shock_crossing_x_fine,shock_crossing_subsonic_edge_r_fine,shock_crossing_edge_r_fine,"
             "M_behind_axis\n")
     for lab, *v in rows:
         f.write(",".join(lab.split("__") + [f"{a:.4f}" for a in v]) + "\n")
