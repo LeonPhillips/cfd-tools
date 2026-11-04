@@ -8,9 +8,10 @@ Default convergence check for new runs (see the Simulation folder's `.claude/rul
 | File | Content |
 |---|---|
 | `convergence.png` | Residuals, probe Mach, box change, mass flows, CFL, Mach difference map (x 0-16, r 0-6 mm) |
-| `conv_lines.png` | Mach along each of the six lines, latest vs previous snapshot (mean / p99 / max \|dMach\| in the titles) |
+| `conv_lines.png` | Mach along each of the six lines for every snapshot of the stage, coloured by iteration; latest in black (latest mean / p99 / max \|dMach\| in the titles) |
 | `conv_features.png` | 2x2 against iteration: Mach disk x, Mach disk r, bow shock x, stagnation x (all logged in features.csv) |
 | `box_change.csv`, `line_change.csv`, `features.csv` | One row per snapshot (a few kB in all) |
+| `line_history.npz` | Mach on the six lines of every snapshot (~34 kB per snapshot, ~1.7 MB per 50k iterations) |
 
 Each PNG is also copied to the run folder as `*_latest.png`.
 
@@ -40,4 +41,5 @@ Each PNG is also copied to the run folder as `*_latest.png`.
 - `conv_update.py`: the three CSVs, plus pruning.
 - `plot_conv_roi.py`, `plot_conv_lines.py`, `plot_conv_features.py`: the three figures.
 - `probes_md.py` (pvbatch): the probe line.
-- `test_offline.sh`: tests the post-processing on two existing solutions (no SU2). It passed on 2026-11-04 on m3f102.
+- `test_offline.sh`: tests the post-processing on existing solutions (no SU2); `MANY=1` uses seven. Both passed on
+  2026-11-04 on m3f102.
