@@ -31,7 +31,7 @@ if prev and os.path.exists(f"{prev}/line_history.npz"):
             restart = (int(hp["iter"][-1]), hp["line_Mach"][-1])
 lc = f"{folder}/line_change.csv"
 last = None
-if os.path.exists(lc) and os.path.getsize(lc) > 80:
+if os.path.exists(lc) and len(open(lc).readlines()) > 1:
     tab = np.atleast_2d(np.genfromtxt(lc, delimiter=",", skip_header=1))
     if tab.size:
         last = tab[-1]

@@ -65,7 +65,7 @@ ax[0, 1].set_ylabel("probe Mach - current value"); ax[0, 1].legend(fontsize=7)
 ax[0, 1].set_title("Mach at the probes (each shown relative to its latest value)", fontsize=9)
 
 bc = f"{folder}/box_change.csv"
-p = np.atleast_2d(np.genfromtxt(bc, delimiter=",", skip_header=1)) if os.path.exists(bc) and os.path.getsize(bc) > 60 else None
+p = np.atleast_2d(np.genfromtxt(bc, delimiter=",", skip_header=1)) if os.path.exists(bc) and len(open(bc).readlines()) > 1 else None
 if p is not None and p.size:
     ax[0, 2].semilogy(p[:, 0], p[:, 2], "o-", ms=3, label="mean |dMach|")
     ax[0, 2].semilogy(p[:, 0], p[:, 3], "s-", ms=3, label="p99 |dMach| (99 % of points change less)")
@@ -111,7 +111,7 @@ if len(snaps) >= 2:
         ax[1, 2].plot(x, r, "x", color="g", ms=7, mew=1.5, clip_on=False)
         ax[1, 2].annotate(q, (x, r), (-14, 4) if q.startswith("up") else (4, 4), textcoords="offset points", color="g", fontsize=7)
     side = lambda f: ("prev. stage " if prev and f.startswith(prev) else "") + str(key(f))
-    ax[1, 2].set_title(f"Mach, snapshot {side(snaps[-1])} minus {side(snaps[-2])}   max |dM| {np.nanmax(np.abs(d)):.2e}\n"
+    ax[1, 2].set_title(f"Mach, snapshot {side(snaps[-1])} minus {side(snaps[-2])}   max |dM| {np.nanmax(np.abs(d)) if np.isfinite(d).any() else np.nan:.2e}\n"
                        f"(grey: current Mach 1, 2, 2.5, 3)", fontsize=9)
     ax[1, 2].set_xlabel("x [mm] (freestream from the right)"); ax[1, 2].set_ylabel("r [mm]")
 else:
