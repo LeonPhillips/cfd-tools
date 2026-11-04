@@ -16,8 +16,8 @@ D = 4.6 mm. Definitions (user-approved plan, 2026-11-04):
 - Bow shock per row: the "edge" is the first x from upstream (x = 20 mm) where Mach < 97 % of that row's upstream
   Mach (the old threshold method, kept as a cross-check); the shock is the d(rho)/dx minimum within -0.5/+0.25 mm of it.
 - Radial extent of the Mach disk (triple-point estimate) and of the terminal-shock arc: follow the shock outward row by
-  row (peak within +-0.3 mm of the previous row); the edge is the r where the peak falls to 50 % of its axis value
-  (linear between rows).
+  row (peak within +-0.3 mm of the previous row); *_edge_r is the r where the peak falls to 50 % of its axis value
+  (linear between rows). Fragile: the terminal-shock strength off the axis hovers near 55-60 % of the axis value.
 - Jet sonic-line max radius: per x column from the exit to the terminal shock, the outer M = 1 edge of the first
   supersonic band out from the axis; the largest r and its x.
 - axis_u0_x: every u_x sign change on the axis between the exit and the bow shock; (+/-) = +x flow ends there.
