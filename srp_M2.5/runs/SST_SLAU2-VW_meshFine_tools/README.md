@@ -48,5 +48,5 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
 |---|---|
 | `setup_slau2vw.sh` | Builds the run folders under `/scratch/os85/lp3540/su2/cases/srp_M2.5/runs/` (`TEST=1`: the test folder) |
 | `run_chain_gadi.sh` | The chain driver: probes, SU2, watcher per stage, then `plot_chain.py` |
-| `chain.pbs` | One case: `qsub -N <name> -v RUN=<run folder>,TITLE="<title>" chain.pbs` |
+| `chain.pbs` | One case: `qsub -N <name> -v RUN=<run folder> chain.pbs` (title from `<run>/title.txt`) |
 | `test.pbs` | Checks ParaView 6.1 against M3's 5.13 (`compare_pv.py`), then runs 2000 live iterations |

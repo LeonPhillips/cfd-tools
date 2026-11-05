@@ -1,7 +1,8 @@
 #!/bin/bash
 # One SLAU2 + Venkatakrishnan-Wang meshFine chain (t1 1000 / t2 1000 / t3 8000 iterations) with the live monitor, on
 # one normal-queue node (user, 2026-11-05). 46 SU2 ranks; 2 cores for the watcher / ParaView.
-#   qsub -N slau2vw_p0j7.0 -v RUN=<run folder>,TITLE="<title>" chain.pbs
+#   qsub -N slau2vw_p0j7.0 -v RUN=<run folder> chain.pbs
+# The chain title is read from <run folder>/title.txt (qsub -v can't pass values with spaces).
 # Cost: normal queue 2 SU per core-hour, 48 cores: 96 SU/h; the 0:50 request caps it at 80 SU.
 #PBS -P os85
 #PBS -q normal
@@ -13,7 +14,8 @@
 #PBS -j oe
 set -u
 TOOLS=/scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/runs/SST_SLAU2-VW_meshFine_tools
-bash $TOOLS/run_chain_gadi.sh ${RUN:?set RUN=<run folder>} "${TITLE:-$(basename $RUN)}"
+TITLE=$(cat ${RUN:?set RUN=<run folder>}/title.txt 2>/dev/null || basename $RUN)
+bash $TOOLS/run_chain_gadi.sh $RUN "$TITLE"
 rc=$?
 tail -25 $RUN/chain.log
 exit $rc
