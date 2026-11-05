@@ -41,5 +41,11 @@ Each PNG is also copied to the run folder as `*_latest.png`.
 - `conv_update.py`: the three CSVs, plus pruning.
 - `plot_conv_roi.py`, `plot_conv_lines.py`, `plot_conv_features.py`: the three figures.
 - `probes_md.py` (pvbatch): the probe line.
+- `plot_chain.py <run folder> "<title>"`: the three figures for a whole chain (t1 + t2 + t3), on one cumulative iteration
+  axis (each stage offset by the ITER of the stages before it). Writes `<run>/{convergence,conv_lines,conv_features}_chain.png`.
+- `plot_grid_lines.py` / `plot_grid_features.py <out.png> "<title>" label=<t3 stage folder> ...`: the line and feature
+  plots with one curve or point per mesh (each mesh's final snapshot), coarsest first.
+- **Default report (user, 2026-11-05):** a request for convergence plots means `plot_chain.py` for each mesh plus the two
+  grid plots, not the per-stage figures.
 - `test_offline.sh`: tests the post-processing on existing solutions (no SU2); `MANY=1` uses seven. Both passed on
   2026-11-04 on m3f102.
