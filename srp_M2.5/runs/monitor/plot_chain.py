@@ -30,6 +30,7 @@ MAP = (0.0, 16.0, 0.0, 6.0)
 run = sys.argv[1].rstrip("/")
 tag = sys.argv[2] if len(sys.argv) > 2 else os.path.basename(run)
 stages = sorted(d for d in glob.glob(f"{run}/2_jet_staged/t*") if os.path.isdir(d))
+stages = [d for d in stages if os.path.isfile(f"{d}/history.csv")]   # skip stages set up but not started yet
 SC = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]   # one colour per stage
 
 
