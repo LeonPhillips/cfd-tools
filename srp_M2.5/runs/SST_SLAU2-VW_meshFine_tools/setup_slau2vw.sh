@@ -1,5 +1,5 @@
 #!/bin/bash
-# SLAU2 + Venkatakrishnan-Wang on meshFine, p0j 7.0 and 7.4945 bar, on Gadi (user, 2026-11-05). Builds the run folders:
+# SLAU2 + Venkatakrishnan-Wang on meshFine, p0j 7.0 and 7.4945 bar (user, 2026-11-05) and 6.6 bar (2026-11-06), on Gadi. Builds the run folders:
 #   <R>/SST_p0j<P>_p0inf3.247_meshFine_SLAU2-VW/
 #     0_start/                 copies (not symlinks) of the AUSM+UP2 t3 restart.dat and flow.vtu on the same mesh
 #     2_jet_staged/t1_cap0.5/  1000 iterations, CFL 0.1 -> cap 0.5
@@ -9,8 +9,13 @@
 #   CONV_NUM_METHOD_FLOW= SLAU2, SLOPE_LIMITER_FLOW= VENKATAKRISHNAN_WANG (VENKAT_LIMITER_COEFF 0.05 kept),
 #   ITER / CFL_NUMBER / CFL_ADAPT_PARAM cap per stage, SOLUTION_FILENAME, MESH_FILENAME (Gadi path), the header.
 #   CUSTOM_OUTPUTS is reset per stage by the chain driver (probes_md.py). Nothing stops on convergence.
-# TEST=1: builds <R>/SST_p0j7.4945_p0inf3.247_meshFine_SLAU2-VW_test with t1_cap0.5 only, ITER 2000 (the test job).
+# TEST=1: builds <R>/SST_p0j<TEST_P>_p0inf3.247_meshFine_SLAU2-VW_test with t1_cap0.5 only, ITER 2000 (the test job);
+#   TEST_P defaults to 7.4945.
+# CASES="6.6": which p0j cases to build (default "7.0 7.4945"). STAGES="name:ITER:CFL0:cap ...": the stage list
+#   (default the 10k t1-t3 ramp). FULL=1 sets STAGES to the full 100k chain t1-t5 (1k/1k/8k/40k/50k; user, 2026-11-06,
+#   p0j 6.6 bar, the same process as 7.0 and 7.4945 bar after their t4 and t5 continuations).
 # Usage (login node; copies ~160 MB per case): bash setup_slau2vw.sh            or   TEST=1 bash setup_slau2vw.sh
+#   p0j 6.6 bar: CASES=6.6 FULL=1 bash setup_slau2vw.sh  and  TEST=1 TEST_P=6.6 bash setup_slau2vw.sh
 set -e
 R=/scratch/os85/lp3540/su2/cases/srp_M2.5/runs
 MESH=/scratch/os85/lp3540/su2/cases/srp_M2.5/mesh/srp_M2.5_meshFine.su2
@@ -58,10 +63,13 @@ build() {  # build <P> <run folder> <stage list "name:ITER:CFL0:cap ...">
   diff $S/t3_cap3.cfg $RUN/2_jet_staged/$n/$n.cfg | grep -E "^[<>] [A-Z]" || true
 }
 
+STAGES=${STAGES:-"t1_cap0.5:1000:0.1:0.5 t2_cap1:1000:0.5:1.0 t3_cap3:8000:1.0:3.0"}
+[ "${FULL:-0}" = 1 ] && STAGES="t1_cap0.5:1000:0.1:0.5 t2_cap1:1000:0.5:1.0 t3_cap3:8000:1.0:3.0 t4_cap3:40000:1.0:3.0 t5_cap3:50000:1.0:3.0"
 if [ "${TEST:-0}" = 1 ]; then
-  build 7.4945 $R/SST_p0j7.4945_p0inf3.247_meshFine_SLAU2-VW_test "t1_cap0.5:2000:0.1:0.5"
+  P=${TEST_P:-7.4945}
+  build $P $R/SST_p0j${P}_p0inf3.247_meshFine_SLAU2-VW_test "t1_cap0.5:2000:0.1:0.5"
 else
-  for P in 7.0 7.4945; do
-    build $P $R/SST_p0j${P}_p0inf3.247_meshFine_SLAU2-VW "t1_cap0.5:1000:0.1:0.5 t2_cap1:1000:0.5:1.0 t3_cap3:8000:1.0:3.0"
+  for P in ${CASES:-7.0 7.4945}; do
+    build $P $R/SST_p0j${P}_p0inf3.247_meshFine_SLAU2-VW "$STAGES"
   done
 fi

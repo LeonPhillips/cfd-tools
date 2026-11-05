@@ -35,6 +35,18 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
   `monitor/watch_conv_gadi.sh`, which uses ParaView 6.1.1. The report is the chain figures (`plot_chain.py`), as in
   `figures/srp_M2.5/SST/p0j7.0/meshFine/`.
 
+## p0j 6.6 bar (user, 2026-11-06)
+
+- **Case C:** p0j 6.6 bar (660000 Pa), T0j 288.15 K. Its AUSM+UP2 meshFine t3 config differs from the 7.0 bar one only
+  in the jet inlet.
+- **Start:** the 6.6 bar AUSM+UP2 meshFine t3 (iteration 19999). It was copied from M3 on 2026-11-06 and SHA-256
+  checked.
+- **Same process as A and B:** t1 1000 (cap 0.5), t2 1000 (cap 1), t3 8000, t4 40,000 and t5 50,000 (cap 3), so
+  100,000 iterations. All five stages run in one job (`CASES=6.6 FULL=1 bash setup_slau2vw.sh`).
+- **Faster:** one normalsr node (Sapphire Rapids, 104 cores, 500 GB): 102 SU2 ranks, `chain_sr.pbs`.
+  - First a 2000-iteration test at 104 cores (`TEST=1 TEST_P=6.6`, 0:12, at most 42 SU).
+  - Full run: 2:00 walltime, at most 416 SU. Expected 75–95 min and 260–330 SU, against 3.3 h and 311 SU on 46 ranks.
+
 ## Gadi resources
 
 - One normal-queue node per case: 48 cores, 190 GB. SU2 runs on 46 ranks; the other 2 cores run the watcher.
@@ -49,4 +61,6 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
 | `setup_slau2vw.sh` | Builds the run folders under `/scratch/os85/lp3540/su2/cases/srp_M2.5/runs/` (`TEST=1`: the test folder) |
 | `run_chain_gadi.sh` | The chain driver: probes, SU2, watcher per stage, then `plot_chain.py` |
 | `chain.pbs` | One case: `qsub -N <name> -v RUN=<run folder> chain.pbs` (title from `<run>/title.txt`) |
+| `chain_sr.pbs` | One case on one normalsr node (104 cores, 102 SU2 ranks), 2:00: `qsub -N <name> -v RUN=<run folder> chain_sr.pbs` |
+| `add_stage.sh` | Adds a continuation stage from the previous stage's restart |
 | `test.pbs` | Checks ParaView 6.1 against M3's 5.13 (`compare_pv.py`), then runs 2000 live iterations |

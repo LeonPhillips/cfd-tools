@@ -1,0 +1,24 @@
+#!/bin/bash
+# One SLAU2 + Venkatakrishnan-Wang meshFine chain on ONE normalsr node (Sapphire Rapids, 104 cores, 500 GB), with the
+# live monitor (user, 2026-11-06: p0j 6.6 bar, 104 cores to run faster than the 48-core normal node).
+# 102 SU2 ranks; the other 2 cores run the watcher / ParaView. All stages in <run>/2_jet_staged run in this one job.
+#   qsub -N slau2vw_p0j6.6 -v RUN=<run folder> chain_sr.pbs                 (full chain, 2:00)
+#   qsub -N slau2vw_sr_test -l walltime=00:12:00 -v RUN=<test folder> chain_sr.pbs
+# The chain title is read from <run folder>/title.txt (qsub -v can't pass values with spaces).
+# Cost: normalsr 2 SU per core-hour, 104 cores: 208 SU/h; the 2:00 request caps it at 416 SU.
+#PBS -P os85
+#PBS -q normalsr
+#PBS -l ncpus=104
+#PBS -l mem=500GB
+#PBS -l walltime=02:00:00
+#PBS -l storage=scratch/os85
+#PBS -l wd
+#PBS -j oe
+set -u
+TOOLS=/scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/runs/SST_SLAU2-VW_meshFine_tools
+TITLE=$(cat ${RUN:?set RUN=<run folder>}/title.txt 2>/dev/null || basename $RUN)
+grep -m1 "model name" /proc/cpuinfo
+NP=102 bash $TOOLS/run_chain_gadi.sh $RUN "$TITLE"
+rc=$?
+tail -25 $RUN/chain.log
+exit $rc

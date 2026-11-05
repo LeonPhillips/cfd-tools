@@ -10,7 +10,7 @@
 # Nothing here stops on convergence.
 TOOLS=$(dirname $(readlink -f $0)); MON=$(readlink -f $TOOLS/../monitor)
 RUN=$(readlink -f ${1:?run folder}); TITLE=${2:-$(basename $RUN)}
-NP=${NP:-46}; PV_MODULE=${PV_MODULE:-paraview/6.1.1-mesa}
+NP=${NP:-46}   # chain.pbs: 46 of 48 (normal); chain_sr.pbs: 102 of 104 (normalsr); PV_MODULE=${PV_MODULE:-paraview/6.1.1-mesa}
 exec >> $RUN/chain.log 2>&1
 echo "chain start $(date) on $(hostname), job ${PBS_JOBID:-none}, $NP ranks, cfd-tools $(git -C $TOOLS rev-parse --short HEAD)"
 source /scratch/os85/lp3540/su2/SU2-v8.5.0/su2_env.sh
