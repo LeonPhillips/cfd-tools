@@ -30,9 +30,18 @@ done_step() {  # done_step <folder> <cfg>: true if that SU2 run finished all its
   it=$(last_it $1); [ -n "$it" ] && [ "$it" -eq $((n - 1)) ]
 }
 probes() {  # probes <stage folder> <cfg> <starting flow.vtu>
-  local p
-  p=$(cd $1; unset LD_PRELOAD PYTHONPATH PYTHONHOME VIRTUAL_ENV; module purge >/dev/null 2>&1; module load $PV_MODULE >/dev/null 2>&1
-      pvbatch $MON/probes_md.py $3 2> probes.log | grep -v -i warning | tail -1)
+  local p try
+  # 2026-11-06: on a normalsr node "pvbatch: command not found" here although the watcher's identical call worked, so
+  # the module system is (re)initialised inside the subshell, module errors go to probes.log, and it is tried twice.
+  for try in 1 2; do
+    p=$(cd $1; unset LD_PRELOAD PYTHONPATH PYTHONHOME VIRTUAL_ENV
+        source /opt/Modules/v4.3.0/init/bash >/dev/null 2>&1
+        { module purge; module load $PV_MODULE; } > probes_module.log 2>&1
+        command -v pvbatch >> probes_module.log 2>&1
+        pvbatch $MON/probes_md.py $3 2> probes.log | grep -v -i warning | tail -1)
+    [[ "$p" == up0* ]] && break
+    echo "  probes try $try failed: $(tr '\n' ' ' < $1/probes_module.log | cut -c1-300)"; sleep 5
+  done
   echo "  probes from $3:"; sed 's/^/    /' $1/probes.log
   [[ "$p" == up0* ]] || { echo "  WARNING: probes_md.py failed; the config keeps its previous probes"; return 1; }
   sed -i "s|^CUSTOM_OUTPUTS=.*|CUSTOM_OUTPUTS= '$p'|" $1/$2
