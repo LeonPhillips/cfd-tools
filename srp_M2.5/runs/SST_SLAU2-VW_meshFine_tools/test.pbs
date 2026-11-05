@@ -1,0 +1,42 @@
+#!/bin/bash
+# Test before the SLAU2 + VW runs (user, 2026-11-05), one normal-queue node, 0:20 (max 32 SU):
+#  1. ParaView 6.1 check: snap.py (monitor sampling) on the p0j 7.0 bar meshFine AUSM+UP2 t3 flow.vtu, compared with
+#     the M3 ParaView 5.13 snapshot of the same solution (snaps/flow_019999.npz) by compare_pv.py.
+#  2. Live check: 2000 iterations of SLAU2 + VW from the p0j 7.4945 bar meshFine t3 (CFL 0.1 -> cap 0.5), with probes and
+#     watch_conv_gadi.sh, through run_chain_gadi.sh (folder ..._SLAU2-VW_test, built by TEST=1 setup_slau2vw.sh).
+#   qsub test.pbs
+#PBS -P os85
+#PBS -q normal
+#PBS -N slau2vw_test
+#PBS -l ncpus=48
+#PBS -l mem=190GB
+#PBS -l walltime=00:20:00
+#PBS -l storage=scratch/os85
+#PBS -l wd
+#PBS -j oe
+TOOLS=/scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/runs/SST_SLAU2-VW_meshFine_tools
+MON=$TOOLS/../monitor
+R=/scratch/os85/lp3540/su2/cases/srp_M2.5/runs
+T=$R/SST_p0j7.4945_p0inf3.247_meshFine_SLAU2-VW_test
+S70=$R/SST_p0j7.0_p0inf3.247_meshFine/2_jet_staged/t3_cap3
+source /scratch/os85/lp3540/su2/SU2-v8.5.0/su2_env.sh
+type module >/dev/null 2>&1 || source /opt/Modules/v4.3.0/init/bash
+
+echo "== 1. ParaView 6.1 check $(date)"
+P=$T/pvcheck; mkdir -p $P
+ln -sf $S70/flow.vtu $P/flow_019999.vtu   # snap.py takes the iteration from the file name; read-only
+t0=$(date +%s)
+( unset LD_PRELOAD PYTHONPATH PYTHONHOME VIRTUAL_ENV; module purge; module load paraview/6.1.1-mesa
+  pvbatch $MON/snap.py $P $P/flow_019999.vtu 2>&1 | grep -vi warning )
+echo "snap.py took $(( $(date +%s) - t0 )) s"
+python $TOOLS/compare_pv.py $S70/snaps/flow_019999.npz $P/flow_019999.npz
+rm -f $P/flow_019999.vtu
+
+echo "== 2. live SU2 + monitor check $(date)"
+bash $TOOLS/run_chain_gadi.sh $T "TEST SST p0j 7.4945 bar meshFine, SLAU2 + VW, 2000 iterations"
+rc=$?
+tail -30 $T/chain.log
+grep -E "^ +[0-9]+\|" $T/2_jet_staged/t1_cap0.5/t1_cap0.5.log | tail -3
+ls -l $T $T/2_jet_staged/t1_cap0.5 $T/2_jet_staged/t1_cap0.5/snaps
+tail -5 $T/2_jet_staged/t1_cap0.5/watch.log
+exit $rc
