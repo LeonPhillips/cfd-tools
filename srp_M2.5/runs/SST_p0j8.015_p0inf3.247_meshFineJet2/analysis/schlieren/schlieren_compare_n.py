@@ -54,11 +54,11 @@ def panel(fig, ax, d, xlabel=True):
         ax.set_xlabel("x / D from nozzle exit (freestream from the right)")
 
 
-fig, axs = plt.subplots(len(S), 1, figsize=(12, 8 * len(S)))
+fig, axs = plt.subplots(len(S), 1, figsize=(12, 8 * len(S)), layout="constrained")
 for i, (ax, d) in enumerate(zip(np.atleast_1d(axs), S)):
     panel(fig, ax, d, xlabel=i == len(S) - 1)
 fig.suptitle(SUP)
-fig.tight_layout(); fig.savefig(f"{pre}_mirror_LOS.png", dpi=150); plt.close(fig)
+fig.savefig(f"{pre}_mirror_LOS.png", dpi=150); plt.close(fig)
 print("saved", f"{pre}_mirror_LOS.png")
 for d in S:
     fig, ax = plt.subplots(figsize=(12, 8.6))
