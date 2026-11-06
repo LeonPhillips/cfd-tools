@@ -1,0 +1,14 @@
+#!/bin/bash
+# Synthetic schlieren for the three SLAU2-VW meshFine runs vs the NPR 501 experiment (user, 2026-11-06).
+# Serial ParaView + matplotlib: 4 cores, 32 GB (normal queue charges the larger of cores and memory/4 GB: 8 cores),
+# 0:45 -> at most 12 SU.      qsub schlieren_slau2vw.pbs
+#PBS -P os85
+#PBS -q normal
+#PBS -N schlieren_slau2vw
+#PBS -l ncpus=4
+#PBS -l mem=32GB
+#PBS -l walltime=00:45:00
+#PBS -l storage=scratch/os85
+#PBS -l wd
+#PBS -j oe
+bash /scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/runs/SST_p0j8.015_p0inf3.247_meshFineJet2/analysis/schlieren/run_schlieren_slau2vw_gadi.sh
