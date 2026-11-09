@@ -170,3 +170,33 @@ Driver `run/run_gsa_srp.m`; output `GSA/srp_p0j6.6_meshFine_t3/smoke_h0p1/`; fig
   - 25-35 % of their energy sits in the sponges.
   - At h = 0.1 mm the variant-B shock smoothing (0.1 mm) leaves the shocks ~2 cells thick. Upstream, mu_t/mu_inf ~ 0.3,
     so Re_eff ~ 6e5 there: nothing damps grid-scale content in the inviscid supersonic regions.
+
+## Grid check + mode diagnostics (2026-11-09, shift 2 + 0.1i)
+
+New per-mode metrics in `run_gsa_srp.m`:
+- `grid_frac`: energy at grid scale, |q - Sq|^2/|q|^2 with S a masked 3x3 [1 2 1]^2/16 filter
+- `shock_frac`: energy within 3 cells of the shock sensor
+- `sponge_frac`: energy where sponge > 0.5
+
+`locate_modes.m` gives the energy per sponge and boundary set, and the location of max |p'|.
+Launcher: `run/run_gsa.sh`. Output: `GSA/srp_p0j6.6_meshFine_t3/gridcheck2_h{0p1,0p05}/`.
+
+Fixes found on the way (cfd-tools 1837142):
+- Neumann rows on r max now use the inward normal (it was outward, i.e. anti-relaxing).
+- MUMPS instances are now actually freed (`zmumps` needs an output argument). h = 0.05 peak RSS went from 64 to 45 GB
+  with both m in one process.
+
+**Results:**
+
+| h | m | top omega | grid_frac | shock_frac | sponge_frac | where |
+|---|---|---|---|---|---|---|
+| 0.1 | 0, 1 | many up to +0.83i | 0.8-0.95 | 0.15-0.2 | 0.25-0.35 | checkerboard on the bow shock, jet core, freestream |
+| 0.05 | 0 | 1.394+1.194i, ... | ~0.3 | ~0 | 0.8-1.0 | outflow sponge, max at the outflow/body-wall corner (x -9, r 9.08 mm) |
+| 0.05 | 1 | 2.575+1.218i, ... | ~0.3 | ~0 | 0.95-1.0 | same |
+
+- The h = 0.1 checkerboard shock modes are gone at h = 0.05: they were resolution artefacts.
+- At h = 0.05 the window is filled by modes at the corner where the body boundary layer leaves through the outflow.
+- Outflow sponge test (amp 1.5 -> 5, width 3 -> 5 mm, h 0.05, m 0; `spongetest_out5_h0p05/`): the leading
+  eigenvalues barely move (1.3936+1.1941i -> 1.3941+1.1948i), and their sponge fraction drops to 0.5-0.8 as the modes
+  spread. So they are a boundary-closure (corner) artefact, not something the sponge controls.
+- No physical candidate yet in this window (none with low sponge and grid fractions).
