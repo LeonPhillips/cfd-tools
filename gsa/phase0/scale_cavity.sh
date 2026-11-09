@@ -11,6 +11,9 @@ NT=${NT:-${SLURM_CPUS_PER_TASK:-16}}
 OUT=$(pwd)
 module load matlab/r2023b
 echo "factor,exit,dof,nnz,eigs_s,wall_s,maxrss_MB" > "$OUT/scale_summary.csv"
+# run() executes the script from its own folder, so the example's relative paths must resolve here
+ln -sfn "$REPO/aux_matlab" "$OUT/aux_matlab"
+ln -sfn "$REPO/BaseFlows" "$OUT/BaseFlows"
 for F in $FACTORS; do
     ex="cav_F${F/./p}"
     sed -e "s/^Nx_cavity *=.*/Nx_cavity = round(80*$F);/" \
