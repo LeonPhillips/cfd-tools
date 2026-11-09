@@ -32,5 +32,5 @@ for k = 1:min(4, numel(S.keep))
     caxis([-6 0]); colorbar; title(sprintf('log10 |p''|, mode %d, \\omega = %.3f%+.3fi', k, ...
         real(S.omega(S.keep(k))), imag(S.omega(S.keep(k)))));
 end
-exportgraphics(f, [erase(matfile, '.mat') '_where.png'], 'Resolution', 100); close(f);
+exportgraphics(f, [char(erase(matfile, '.mat')) '_where.png'], 'Resolution', 100); close(f);
 end
