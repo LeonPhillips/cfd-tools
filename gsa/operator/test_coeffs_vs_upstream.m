@@ -21,11 +21,30 @@ vm3 = run_coeffs('getCoeffsAxyVarMu', v3);
 v4 = v;  v4.MU = v.MU + c;
 up3 = run_coeffs('getCoeffsLaminar', v4);
 
+% Test 4: what the differences in Test 1 are. With dmudT = 0 (no mu' = dmudT*T' term, only its
+% gradient d2mudT2*grad(T) T') they should vanish if upstream only omits mu' * (derivatives of the
+% base stress), i.e. the mu'*div(tau_bar) and mu'*(viscous work) terms.
+v5 = v; v5.dmudT = zeros(n,1);
+up5 = run_coeffs('getCoeffsLaminar', v5);
+mt5 = run_coeffs('getCoeffsAxyMuT',  v5);
+% Test 5: are the differences independent of m and d2mudT2?
+v6 = v; v6.m = 7; v6.d2mudT2 = 3*v.d2mudT2;
+up6 = run_coeffs('getCoeffsLaminar', v6);
+mt6 = run_coeffs('getCoeffsAxyMuT',  v6);
+dd = struct();
+for f = {'A0_25','A0_35','A0_45','A0_55'}
+    dd.(f{1}) = max(abs((mt6.(f{1}) - up6.(f{1})) - (mt.(f{1}) - up.(f{1})))) / max(abs(mt.(f{1}) - up.(f{1})));
+end
+
 report = struct();
 report.test1 = compare(up, mt);
 report.test2 = compare(mt, vm);
 report.test3 = compare(up3, vm3);
-for t = {'test1','test2','test3'}
+report.test4 = compare(up5, mt5);
+report.test5 = dd;
+fprintf('test5 (change of the difference when m and d2mudT2 change, relative): A0_25 %.1e, A0_35 %.1e, A0_45 %.1e, A0_55 %.1e\n', ...
+        dd.A0_25, dd.A0_35, dd.A0_45, dd.A0_55);
+for t = {'test1','test2','test3','test4'}
     R = report.(t{1});
     fprintf('%s: max relative difference %.2e over %d coefficients (worst %s)\n', t{1}, R.max, R.n, R.worst);
     if ~isempty(R.bad)
