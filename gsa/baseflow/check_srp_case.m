@@ -53,10 +53,11 @@ Mr(isnan(Mr)) = 0; Ms(isnan(Ms)) = 0;
 for k = 1:numel(lines)
     L = lines{k}; t = linspace(0, 1, 2000)';
     xl = L(1) + t*(L(3)-L(1)); rl = L(2) + t*(L(4)-L(2));
+    rg = max(rl, Y(1,1));                   % the grid's first row is at dr/2 (axis line r = 0.01 mm)
     subplot(3,2,k); hold on;
     plot(xl, F(xl, rl), 'k-', 'DisplayName', 'CFD (SU2 nodes)');
-    plot(xl, interp2(X, Y, Mr, xl, rl), 'b--', 'DisplayName', 'grid, raw');
-    plot(xl, interp2(X, Y, Ms, xl, rl), 'r-', 'DisplayName', 'grid, smoothed');
+    plot(xl, interp2(X, Y, Mr, xl, rg), 'b--', 'DisplayName', sprintf('grid, raw (r >= %.3f mm)', Y(1,1)));
+    plot(xl, interp2(X, Y, Ms, xl, rg), 'r-', 'DisplayName', 'grid, smoothed');
     grid on; xlabel('x (mm)'); ylabel('Mach');
     title(sprintf('(%.2f, %.2f) -> (%.2f, %.2f) mm', L)); if k == 1, legend('Location', 'best'); end
 end
