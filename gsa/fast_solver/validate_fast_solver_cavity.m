@@ -25,10 +25,12 @@ code = fileread(fullfile(repo, 'example_4_Cavity.m'));
 cut  = strfind(code, '%setup eigs options');
 assert(~isempty(cut), 'marker "%%setup eigs options" not found in example_4_Cavity.m');
 code = code(1:cut(1)-1);
-code = regexprep(code, '(?m)^\s*(clear all|clear variables|close all)\s*;?', '');
-code = regexprep(code, '(?m)^verbose\s*=.*$', 'verbose = false;');
-code = regexprep(code, '(?m)^Nx_cavity\s*=.*$', sprintf('Nx_cavity = round(80*%g);', F));
-code = regexprep(code, '(?m)^Ny_cavity\s*=.*$', sprintf('Ny_cavity = round(50*%g);', F));
+% (MATLAB's '.' matches newlines unless 'dotexceptnewline' is given)
+rx = @(s, p, r) regexprep(s, p, r, 'lineanchors', 'dotexceptnewline');
+code = rx(code, '^[ \t]*(clear all|clear variables|close all)[ \t]*;?', '');
+code = rx(code, '^verbose[ \t]*=.*$', 'verbose = false;');
+code = rx(code, '^Nx_cavity[ \t]*=.*$', sprintf('Nx_cavity = round(80*%g);', F));
+code = rx(code, '^Ny_cavity[ \t]*=.*$', sprintf('Ny_cavity = round(50*%g);', F));
 % Wrap it in a generated function (variables created by eval inside a function are not
 % visible to the rest of the function in current MATLAB).
 fname = ['cav_setup_F' strrep(sprintf('%g', F), '.', 'p')];
