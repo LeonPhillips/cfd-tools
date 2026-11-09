@@ -113,3 +113,8 @@ viscosity field.
   - Our assembly with upstream's coefficient script equals `GetLinProblem('axy')` exactly (wiring check).
   - With dmudT = 0, MuT equals upstream to 1e-16. VarMu with chain-rule gradients equals MuT to 2e-20.
   - The full linearisation vs upstream: 6e-7 relative (Ma 0.01, so T hardly varies there).
+
+**Decision (user, 2026-11-09): use the full linearisation** (`getCoeffsAxyVarMu`, the default in
+`GetLinProblemVarMu`), including the mu' x base-stress terms that upstream LinStab2D omits. The regression rule
+"identical to upstream when mu_t = 0" is replaced by the checks above: identical with dmudT = 0, and identical in the
+171 coefficients that don't carry those terms.
