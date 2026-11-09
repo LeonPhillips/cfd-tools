@@ -17,8 +17,12 @@ dofs = [];
 for b = borders
     pts = idx.([b{1} 'i'])(:);
     switch b{1}
-        case {'l','r'}, n = repmat([1 0], numel(pts), 1);
-        case {'t','b'}, n = repmat([0 1], numel(pts), 1);
+        % normals point INTO the fluid: with dq/dt = penalty*(n.grad q) the boundary value then relaxes towards
+        % the interior (stable); an outward normal makes these rows anti-relax (unstable)
+        case 'l', n = repmat([ 1  0], numel(pts), 1);   % x min
+        case 'r', n = repmat([-1  0], numel(pts), 1);   % x max
+        case 'b', n = repmat([ 0  1], numel(pts), 1);   % r min
+        case 't', n = repmat([ 0 -1], numel(pts), 1);   % r max
         case 'w',       n = mesh.wall_normal;
             assert(size(n,1) == numel(pts), 'mesh.wall_normal must match idx.wi');
         otherwise, error('BC_NeumannRows:border', 'unknown border %s', b{1});

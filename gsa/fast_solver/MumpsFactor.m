@@ -63,7 +63,7 @@ classdef MumpsFactor < handle
             t_fact = toc(t1);
             if id.INFOG(1) < 0
                 err = id.INFOG(1:2);
-                id.JOB = -2; zmumps(id); %#ok<NASGU>
+                id.JOB = -2; id = zmumps(id); %#ok<NASGU>   % zmumps needs an output, or it returns without releasing
                 error('MumpsFactor:factor', 'MUMPS factorisation failed: INFOG(1:2) = [%d %d]', err);
             end
             F.id = id;
@@ -113,7 +113,7 @@ classdef MumpsFactor < handle
         function release(F)
             if ~isempty(F.id) && F.id.INST ~= -9999
                 F.id.JOB = -2;
-                zmumps(F.id);
+                F.id = zmumps(F.id);   % zmumps returns without releasing if nargout = 0
                 F.id = [];
             end
         end
