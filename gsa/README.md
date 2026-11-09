@@ -151,3 +151,22 @@ viscosity field.
 - **Decision (user, 2026-11-09): variant B** (filter 0.1 mm, blend 0.15 mm, sensor threshold 0.15 of max |grad p|,
   sensor sigma 0.15 mm, sensor only for x > 3 mm). Now the default in `srp_case_defaults.m`; the h = 0.05 mm case
   is `case/case_h0p05_B.mat`.
+
+## Phase 4 smoke test (2026-11-09, h = 0.1 mm, shift 2 + 0.1i, m = 0 and 1)
+
+Driver `run/run_gsa_srp.m`; output `GSA/srp_p0j6.6_meshFine_t3/smoke_h0p1/`; figures
+`figures/newFigs/2026-11-09_srp_GSA_p0j6.6_smoke-h0p1_m{0,1}_{spectrum,modes}.png`.
+
+- **Mechanics work.**
+  - 346,865 DOF; operator build ~5 s.
+  - MUMPS factorisation 6-9 s (factors 4.6 / 6.7 GB for m = 0 / 1). 50 modes direct + adjoint in 150-160 s per shift.
+  - Peak RSS 16.6 GB (both m in one process); wall 6 min.
+  - Eigen-residuals <= 7e-16, and every direct eigenvalue pairs with a conj(adjoint) one to <= 4e-12.
+  - BCs as the method: Dirichlet on 1,465 + 528 dofs, Neumann on 176 + 2,340.
+- **The leading modes are numerical, not physical.**
+  - Many modes are strongly "unstable" (omega_i up to 0.83) at St_D 0.15-0.47 for both m.
+  - Their shapes are grid-scale (odd-even / checkerboard) oscillations: on the bow shock, in the jet core, and in the
+    supersonic freestream ahead of the bow shock, where perturbations should not live.
+  - 25-35 % of their energy sits in the sponges.
+  - At h = 0.1 mm the variant-B shock smoothing (0.1 mm) leaves the shocks ~2 cells thick. Upstream, mu_t/mu_inf ~ 0.3,
+    so Re_eff ~ 6e5 there: nothing damps grid-scale content in the inviscid supersonic regions.
