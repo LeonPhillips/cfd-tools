@@ -29,7 +29,6 @@ t_all = tic;
 
 S = make_shift_invert_solver(L0 - sigma * speye(n), solver_opts);
 info.solver = S.info;
-cleanup = onCleanup(@() S.release());
 
 % direct
 t = tic;
@@ -50,6 +49,7 @@ if do_adj
     info.resid_adjoint = vecnorm(LadjV - V_adj.*omega_adj.') ./ (normL * vecnorm(V_adj));
 end
 
+S.release();                         % free the factors (MUMPS) before returning
 info.t_total_s = toc(t_all);
 fprintf('  eigs_shift_invert: %d modes, direct %.1f s%s, total %.1f s, max residual %.1e%s\n', ...
     nEig, info.t_eigs_direct_s, ternary(do_adj, sprintf(', adjoint %.1f s', getfield_or(info, 't_eigs_adjoint_s', 0)), ''), ...

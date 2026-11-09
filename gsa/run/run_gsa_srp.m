@@ -100,7 +100,7 @@ f = figure('Position', [0 0 900 600]); hold on; grid on;
 plot(real(S.omega)/(2*pi), imag(S.omega), 'bo', 'DisplayName', 'direct');
 if ~isempty(S.omega_adj), plot(real(S.omega_adj)/(2*pi), -imag(S.omega_adj), 'rx', 'DisplayName', 'conj(adjoint)'); end
 plot(real(S.shift)/(2*pi), imag(S.shift), 'k+', 'MarkerSize', 14, 'LineWidth', 2, 'DisplayName', 'shift');
-yline(0, 'k-');
+yline(0, 'k-', 'HandleVisibility', 'off');
 xlabel('St_D = \omega_r / 2\pi'); ylabel('\omega_i (growth rate)');
 ax = gca; xt = ax.XTick;
 title(sprintf('m = %d, h = %g mm, shift %s; f (kHz) = St_D x %.2f', S.m, S.h_mm, num2str(S.shift), pc.ref.U/pc.D/1e3));
