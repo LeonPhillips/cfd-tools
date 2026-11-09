@@ -2,7 +2,7 @@ function locate_modes(matfile)
 % LOCATE_MODES  Where the saved modes of a run_gsa_srp result live: energy in each sponge (x max, x min, r max),
 % near each boundary set, and the location of max |p'|. Also writes <matfile>_where.png (full-domain |p'|).
 S = load(matfile);
-pc = S.case;
+f = fieldnames(S); pc = S.(f{find(startsWith(f, 'case'), 1)});   % saved as 'case' (a keyword: load renames it)
 [mesh, BF] = build_srp_case(pc); %#ok<ASGLU>
 mm = 1e-3 / pc.D; u = mesh.usedInd; ng = mesh.ngp;
 X = mesh.X(u)/mm; Y = mesh.Y(u)/mm;
