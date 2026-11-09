@@ -121,12 +121,12 @@ assert(isempty(left), 'unexpected symbols left: %s', strjoin(left, ', '));
 assert(isempty(regexp(char(G), '\(r, z\)', 'once')), 'unsubstituted symbolic functions remain');
 
 % coefficients
-pre = struct('rr','Arr','zz','Azz','rz','Arz','r','Ar','z','Az','0','A0');
+pre = {'Arr','Azz','Arz','Ar','Az','A0'};    % same order as kinds / columns of P
 C = struct();
 for i = 1:5
     for j = 1:5
         for k = 1:6
-            C.(sprintf('%s_%d%d', pre.(kinds{k}), i, j)) = diff(G(i), P(j,k));
+            C.(sprintf('%s_%d%d', pre{k}, i, j)) = diff(G(i), P(j,k));
         end
         C.(sprintf('B_%d%d', i, j)) = 1i*diff(JB(i), P(j,6));
     end
