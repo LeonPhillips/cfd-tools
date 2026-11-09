@@ -76,8 +76,9 @@ F(5) = -div((Et + p)*ur, (Et + p)*ut, (Et + p)*uz) + div(ar, at, az)/Re ...
 Q = [rho; rho*ur; rho*ut; rho*uz; Et];
 
 % linearise: d/d(ep) at ep = 0, then strip exp(1i*m*th) (every term is linear in it)
-G  = subs(subs(diff(F, ep), ep, 0), th, 0);
-JB = subs(subs(diff(Q, ep), ep, 0), th, 0);
+G  = formula(subs(subs(diff(F, ep), ep, 0), th, 0));   % formula(): plain sym arrays, not symfuns
+JB = formula(subs(subs(diff(Q, ep), ep, 0), th, 0));
+fm = @(x) formula(x);
 fprintf('linearised in %.0f s\n', toc(t0));
 
 % placeholders for perturbation derivatives
@@ -86,7 +87,7 @@ vname = {'1','2','3','4','5'};
 kinds = {'rr','zz','rz','r','z','0'};
 P = sym(zeros(5, 6));
 for j = 1:5
-    f = pert{j};
+    f = fm(pert{j});
     P(j,:) = sym({sprintf('P%s_rr',vname{j}), sprintf('P%s_zz',vname{j}), sprintf('P%s_rz',vname{j}), ...
                   sprintf('P%s_r',vname{j}),  sprintf('P%s_z',vname{j}),  sprintf('P%s_0',vname{j})});
     G  = subs(G,  [diff(f,r,r), diff(f,z,z), diff(f,r,z), diff(f,z,r)], [P(j,1), P(j,2), P(j,3), P(j,3)]);
@@ -101,15 +102,15 @@ U = mk('U'); V = mk('V'); W = mk('W'); RHO = mk('RHO'); Tn = mk('Tn'); MU = mk('
 dmudT = mk('dmudT'); d2mudT2 = mk('d2mudT2'); dMUdr = mk('dMUdr'); dMUdz = mk('dMUdz'); R = mk('R');
 base = {Ub,'U'; Vb,'V'; Wb,'W'; RHOb,'RHO'; Tb,'T'};
 for k = 1:size(base,1)
-    f = base{k,1}; nm = base{k,2};
+    f = fm(base{k,1}); nm = base{k,2};
     G = subs(G, [diff(f,r,r), diff(f,z,z), diff(f,r,z), diff(f,z,r)], ...
                 [sym(['d2' nm 'dr2']), sym(['d2' nm 'dz2']), sym(['d2' nm 'drz']), sym(['d2' nm 'drz'])]);
     G = subs(G, [diff(f,r), diff(f,z)], [sym(['d' nm 'dr']), sym(['d' nm 'dz'])]);
 end
-G  = subs(G,  [diff(dmudTb,r), diff(dmudTb,z)], [d2mudT2*sym('dTdr'), d2mudT2*sym('dTdz')]);
-G  = subs(G,  [diff(MUb,r), diff(MUb,z)], [dMUdr, dMUdz]);
-G  = subs(G,  [Ub, Vb, Wb, RHOb, Tb, MUb, dmudTb], [U, V, W, RHO, Tn, MU, dmudT]);
-JB = subs(JB, [Ub, Vb, Wb, RHOb, Tb], [U, V, W, RHO, Tn]);
+G  = subs(G,  [fm(diff(dmudTb,r)), fm(diff(dmudTb,z))], [d2mudT2*sym('dTdr'), d2mudT2*sym('dTdz')]);
+G  = subs(G,  [fm(diff(MUb,r)), fm(diff(MUb,z))], [dMUdr, dMUdz]);
+G  = subs(G,  [fm(Ub), fm(Vb), fm(Wb), fm(RHOb), fm(Tb), fm(MUb), fm(dmudTb)], [U, V, W, RHO, Tn, MU, dmudT]);
+JB = subs(JB, [fm(Ub), fm(Vb), fm(Wb), fm(RHOb), fm(Tb)], [U, V, W, RHO, Tn]);
 G  = subs(G, r, R);
 left = setdiff(arrayfun(@char, symvar(G), 'UniformOutput', false), ...
                [arrayfun(@char, P(:).', 'UniformOutput', false), {'U','V','W','RHO','Tn','MU','dmudT','d2mudT2', ...
