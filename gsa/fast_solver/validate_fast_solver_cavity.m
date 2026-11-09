@@ -29,11 +29,18 @@ code = regexprep(code, '(?m)^\s*(clear all|clear variables|close all)\s*;?', '')
 code = regexprep(code, '(?m)^verbose\s*=.*$', 'verbose = false;');
 code = regexprep(code, '(?m)^Nx_cavity\s*=.*$', sprintf('Nx_cavity = round(80*%g);', F));
 code = regexprep(code, '(?m)^Ny_cavity\s*=.*$', sprintf('Ny_cavity = round(50*%g);', F));
-old = cd(repo);
+% Wrap it in a generated function (variables created by eval inside a function are not
+% visible to the rest of the function in current MATLAB).
+fname = ['cav_setup_F' strrep(sprintf('%g', F), '.', 'p')];
+fid = fopen(fullfile(outdir, [fname '.m']), 'w');
+fprintf(fid, 'function [L0, W, invW, nEig, omega_target] = %s()\n%s\nend\n', fname, code);
+fclose(fid);
+addpath(outdir);
+rehash;
+old = cd(repo);                              % the example's relative paths need the repo as cwd
 restore = onCleanup(@() cd(old));
-eval(code);
+[L0, W, invW, nEig, omega_target] = feval(fname);
 clear restore
-cd(old);
 
 opts = struct('tol', 1e-8, 'disp', 0, 'p', 300);   % the example's eigs settings
 n = size(L0, 1);
