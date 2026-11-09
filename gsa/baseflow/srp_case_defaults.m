@@ -27,9 +27,11 @@ p.h_mm       = 0.1;       % 0.1 smoke test, 0.07 sweep, 0.05 production, 0.04 gr
 p.sigma_visc      = 1;    % MU = MU_Sutherland + sigma_visc * mu_t/mu_inf
 p.mut_sigma_cells = 5;    % Gaussian smoothing of mu_t (method: 5 cells); 0 = none
 
-% local shock smoothing (method's smooth_shock; sigmas in mm here)
-p.smooth = struct('sensor_sigma_mm', 0.15, 'threshold', 0.15, 'filter_sigma_mm', 0.2, ...
-                  'blend_sigma_mm', 0.3, 'x_min_mm', -Inf, 'r_min_mm', -Inf);
+% local shock smoothing (method's smooth_shock; sigmas in mm here).
+% Variant B, chosen by the user 2026-11-09: narrow filter, sensor off near the lip (x <= 3 mm) so the
+% lip expansion and the start of the shear layer stay as in the CFD.
+p.smooth = struct('sensor_sigma_mm', 0.15, 'threshold', 0.15, 'filter_sigma_mm', 0.1, ...
+                  'blend_sigma_mm', 0.15, 'x_min_mm', 3, 'r_min_mm', -Inf);
 
 % sponges (method's GetSponge shape; widths/transitions in mm)
 p.sponge = struct('amp_in', 5,  'width_in_mm', 3,  'trans_in_mm', 1, ...   % freestream inflow, x max

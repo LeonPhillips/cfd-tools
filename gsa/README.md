@@ -148,3 +148,6 @@ viscosity field.
     start of the shear layer (Mach on the shear-layer line drops from 2.8 to ~1.4 at x = 2 mm).
   - Variant B (filter 0.1, blend 0.15 mm, sensor only for x > 3 mm) keeps the lip and shear layer as the CFD, and
     spreads the bow shock and Mach disk over ~3-4 cells without moving them.
+- **Decision (user, 2026-11-09): variant B** (filter 0.1 mm, blend 0.15 mm, sensor threshold 0.15 of max |grad p|,
+  sensor sigma 0.15 mm, sensor only for x > 3 mm). Now the default in `srp_case_defaults.m`; the h = 0.05 mm case
+  is `case/case_h0p05_B.mat`.
