@@ -78,7 +78,7 @@ fprintf('interpolated %d fields at %.0f s\n', numel(fieldnames(fields)), toc(t0)
 sm = p.smooth;
 fluid = ~solid;
 [sensor, shock] = shock_sensor(raw.P, mesh, fluid, sm, h, mm);
-dist = bwdist(shock) * h / mm;              % mm
+dist = double(bwdist(shock)) * h / mm;      % mm (bwdist returns single)
 wblend = exp(-dist.^2 / (2 * sm.blend_sigma_mm^2));
 wblend(solid) = 0;
 sig = sm.filter_sigma_mm * mm / h;          % in cells
@@ -103,7 +103,7 @@ BF.MU_sutherland = BF.MU;
 BF.MU_t = mut;
 BF.MU = BF.MU + p.sigma_visc * mut;
 for f = {'U','V','W','T','RHO','P','MU','MU_sutherland','MU_t','dmudT','d2mudT2'}
-    a = BF.(f{1}); a(solid) = 0; BF.(f{1}) = a;
+    a = double(BF.(f{1})); a(solid) = 0; BF.(f{1}) = a;
 end
 BF.sigma_visc = p.sigma_visc;
 
