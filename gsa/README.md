@@ -55,3 +55,31 @@ Cavity example GSA (direct + adjoint `eigs`, 50 modes, p = 300), refined 1-2.5x 
 
 Fit over all four: memory ~ DOF^1.26, time ~ DOF^1.39. Between the last two points memory grows ~DOF^1.5, which
 is what the estimates use (conservative).
+
+## Fast solver: `fast_solver/` (own MUMPS wrapper, validated 2026-11-09)
+
+The supervisor package has the MUMPS MEX build for M3 but not the MATLAB wrapper (`LinStab2D_addon/`), so this is our
+own implementation of the design described in its README (user, 2026-11-09).
+
+- `MumpsFactor.m`: factorise once (MUMPS 5.7.3, complex unsymmetric, METIS `ICNTL(7)=5`, `CNTL(1)=0.1`, `ICNTL(14)=30`,
+  rows equilibrated by their max |entry|); `solve` = A\b, `solve_ctranspose` = A'\b from the same factors
+  (`ICNTL(9)=2` + conjugation). Solves pass an empty sparse matrix, so A is not copied per solve. Random-RHS check at
+  factorisation.
+- `make_shift_invert_solver.m`: types `'mumps'` (no silent fallback unless `allow_fallback`) and `'umfpack'`.
+- `eigs_shift_invert.m`: drop-in for the two `eigs` calls; adjoint via invW (L0 - sigma I)^-H W; true residuals of
+  every mode against the original L0.
+- `fls_mumps_available.m`: adds `$FLS_MUMPS_DIR` and checks for `zmumpsmex`.
+- MEX: `/scratch/qk75/LeonPhillips/PhD/GSA/mumps_m3/` (copied from `mumps_builds/m3`, SHA-256 checked; only system
+  libgfortran/libgomp/libstdc++ needed). Set `OMP_NUM_THREADS` and `maxNumCompThreads` to the core count.
+- Validation (`validate_fast_solver_cavity.m`, `run_validate.sh`; m3f102, 16 threads; output
+  `GSA/fast_solver_validation/`):
+
+  | Case | Solver | Time (direct + adjoint) | Peak RSS | vs LinStab2D's own `eigs` |
+  |---|---|---|---|---|
+  | cavity, 81,705 DOF | builtin `eigs` x2 | 89.7 s | | reference |
+  | | umfpack wrapper | 92.2 s | | max\|dw\| 2.9e-14 / 1.6e-13 (adj), alignment 1-1e-15 |
+  | | **mumps** | **41.5 s** (factorise 1.7 s, 1.46 GB) | 5.4 GB (all three) | max\|dw\| 1.0e-13 / 1.5e-13 (adj), alignment 1-1.2e-15 |
+  | cavity x2.5, 504,255 DOF | builtin (scaling test) | 1109 s | 38.7 GB | |
+  | | **mumps** | **335 s** (factorise 14.5 s, factors 12.4 GB) | **17.0 GB** | residuals 1.5e-12 / 2.7e-16 |
+
+  Max eigen-residuals ||L v - w v|| / (||L||_1 ||v||): 2.1e-13 direct, 1.7e-13 adjoint (same as UMFPACK).
