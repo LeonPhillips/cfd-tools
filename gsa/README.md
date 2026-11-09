@@ -23,6 +23,25 @@ frequencies (user, 2026-11-09). The comparison with experiment comes after the p
 8. GSA only (no resolvent).
 9. Estimate memory and walltime before every run.
 
+### Revised 2026-11-09 (user): follow the supervisor's GSA method
+
+The supervisor's package (Micah Wong, `context/Supervisor_Package_GSA_Resolvent_FastSolver/README.md`) is the method.
+This replaces items 3, 6 and 7 above:
+
+- **Viscosity:** effective, MU = MU_Sutherland + sigma_visc * MU_t, with MU_t = mu_t(SU2 `Eddy_Viscosity`) / mu_inf.
+  mu_t is frozen (only the Sutherland part is perturbed), and the total mu is used in heat conduction (Pr_eff = 0.72).
+  **A: sigma_visc = 1 baseline**, with sensitivity runs at 0.2 and 0.5.
+- **B: domain** truncated to x -9..+20 mm (-0.5 D..1.1 D), r 0..27 mm (1.5 D), uniform masked grid, tanh sponges at the
+  edges. The nozzle exit plane is an inflow. The tunnel wall and far wake are left out.
+- **BCs (method):** inflow Dirichlet row-only on all 5 variables (penalty 1e8); walls Dirichlet u, v, w and Neumann T
+  (adiabatic); outlet/top Neumann on all variables (1e4) plus sponges. Axis: LinStab2D's axisymmetric treatment.
+- **Shocks:** local shock smoothing of the base flow (`smooth_shock` method), not LinStab2D's filter.
+- **C: operator** = LinStab2D's axisymmetric operator, with the grad(mu) terms (`dmudT.*dTdr`, `dmudT.*dTdz`,
+  `d2mudT2` terms) replaced by gradients of the total mu field. Regression: identical to upstream when mu_t = 0.
+- **D: alpha_rho = 0** to start; 3e-5 only if spurious density modes appear.
+- **Eigen-solve:** 50 modes, tol 1e-8, p = 300, shifts with imaginary part +0.1; adjoint from the same factorisation;
+  MUMPS shift-invert.
+
 ## Memory / time calibration (2026-11-09, m3f102, 16 threads, r2023b)
 
 Cavity example GSA (direct + adjoint `eigs`, 50 modes, p = 300), refined 1-2.5x (`phase0/scale_cavity.sh`):
