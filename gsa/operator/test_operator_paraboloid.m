@@ -16,9 +16,10 @@ addpath(here); addpath(genpath(fullfile(repo, 'aux_matlab')));
 
 % build mesh + base flow with the example's own code, up to GetLinProblem
 code = fileread(fullfile(repo, 'example_5_Paraboloid.m'));
-cut  = regexp(code, '(?m)^.*GetLinProblem\(', 'start', 'once');
-assert(~isempty(cut), 'GetLinProblem call not found in example_5');
-code = code(1:cut-1);
+k = strfind(code, 'GetLinProblem(');
+assert(~isempty(k), 'GetLinProblem call not found in example_5');
+nl = find(code(1:k(1)) == newline, 1, 'last');     % cut at the start of that line
+code = code(1:nl);
 rx = @(s, p, r) regexprep(s, p, r, 'lineanchors', 'dotexceptnewline');
 code = rx(code, '^[ \t]*(clear all|clear variables|close all)[ \t]*;?', '');
 code = rx(code, '^verbose[ \t]*=.*$', 'verbose = false;');
