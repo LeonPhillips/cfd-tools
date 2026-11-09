@@ -118,3 +118,33 @@ viscosity field.
 `GetLinProblemVarMu`), including the mu' x base-stress terms that upstream LinStab2D omits. The regression rule
 "identical to upstream when mu_t = 0" is replaced by the checks above: identical with dmudT = 0, and identical in the
 171 coefficients that don't carry those terms.
+
+## Base flow and grid: `baseflow/` (Phase 3, 2026-11-09)
+
+- `export_baseflow.py` (pvbatch): SU2 nodes in x -12..23 mm, r 0..30 mm (662,880 nodes for meshFine t3), plus the
+  wall_noslip segments. Output: `GSA/srp_p0j6.6_meshFine_t3/baseflow/su2_{flow,wall}.{bin,json}`.
+- Geometry read from the wall (mm): nozzle exit / lip tip x = 1.876 (exit radius 2.27, lip fillet to 2.37), lip
+  outer radius 2.88 from the body face x = 0.496 to the tip, body radius 9.0 (0.1 mm shoulder fillet), throat r 2.0
+  at x ~ 0.
+- `build_srp_case.m` + `srp_case_defaults.m` + `run_build.m` + `check_srp_case.m`:
+  - Uniform grid, h = dr. The x grid is aligned with the exit plane; the face is staircased to within h. The first
+    radial row is at dr/2 (LinStab2D symmetry).
+  - Solid mask = body (x < 0.496, r < 9) + lip/nozzle block (x < 1.876, r < 2.88). The nozzle interior is outside
+    the domain.
+  - Boundary sets: `ji` (exit plane, r < 2.27: inflow), `wi` (all other masked edges: walls, with axis-aligned
+    normals into the fluid, diagonal at corners), `ri` (x max, freestream inflow), `li` (x min), `ti` (r max).
+  - Base flow is interpolated from the SU2 nodes (scatteredInterpolant, natural; nearest for the few points outside
+    the hull) and nondimensionalised by D and freestream.
+  - mu_t = SU2 `Eddy_Viscosity`/mu_inf, clipped >= 0, masked Gaussian 5 cells. MU = Sutherland (LinStab2D
+    `sutherland_air`, T_0 = 128.067 K) + sigma_visc mu_t.
+  - Local shock smoothing as the method, but with masked Gaussians (no leakage from the solid) and sigmas in mm.
+  - Sponges as the method's GetSponge (tanh, max of three): x max (amp 5), x min (amp 1.5), r max (amp 5); width
+    3 mm, transition 1 mm.
+- Sizes: h = 0.1 mm gives 69,373 fluid points (347k DOF); h = 0.05 mm gives 277,434 points (1.39M DOF), built in ~30 s.
+- `operator/BC_NeumannRows.m`: zero normal gradient rows (penalty 1e4) on l/r/t edges and on the masked walls
+  (per-node normals).
+- Check plots: `figures/newFigs/2026-11-09_srp_GSA_p0j6.6_meshFine_case-*.png`.
+  - Variant A (method-like sigmas: filter 0.2, blend 0.3 mm, sensor everywhere) smooths the lip expansion and the
+    start of the shear layer (Mach on the shear-layer line drops from 2.8 to ~1.4 at x = 2 mm).
+  - Variant B (filter 0.1, blend 0.15 mm, sensor only for x > 3 mm) keeps the lip and shear layer as the CFD, and
+    spreads the bow shock and Mach disk over ~3-4 cells without moving them.
