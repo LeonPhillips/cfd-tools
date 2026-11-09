@@ -12,7 +12,7 @@ end
 if ~exist(outdir, 'dir'), mkdir(outdir); end
 [mesh, BF, info] = build_srp_case(p);
 tag = sprintf('h%s', strrep(sprintf('%g', h_mm), '.', 'p'));
-if isfield(p, 'tag') && ~isempty(p.tag), tag = [tag '_' p.tag]; end
+if isfield(p, 'tag') && ~isempty(p.tag), tag = [tag '_' char(p.tag)]; end
 check_srp_case(mesh, BF, info, outdir, tag);
 C = struct('BF', BF, 'p', p, 'idx', mesh.idx, 'usedInd', mesh.usedInd, 'mask', mesh.mask, ...
            'sponge', mesh.sponge, 'wall_normal', mesh.wall_normal, 'X', mesh.X, 'Y', mesh.Y, ...
