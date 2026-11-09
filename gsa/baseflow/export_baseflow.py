@@ -1,4 +1,4 @@
-"""pvbatch --mesa export_baseflow.py <run stage dir> <out prefix> [xmin xmax rmax  (mm)]
+"""[GSA_BOX="xmin,xmax,rmax" (mm)] pvbatch --mesa export_baseflow.py <run stage dir> <out prefix>
 
 Exports an SU2 axisymmetric solution for LinStab2D (srp_M2.5 GSA):
   <out>_flow.bin/.json  : mesh nodes inside the box (x, r in m) with Density, Velocity_x, Velocity_r,
@@ -6,9 +6,10 @@ Exports an SU2 axisymmetric solution for LinStab2D (srp_M2.5 GSA):
                           (SI units, as written by SU2 with REF_DIMENSIONALIZATION= DIMENSIONAL)
   <out>_wall.bin/.json  : wall_noslip surface segments inside the box: x0, r0, x1, r1 (m), from surface.vtu
 Binary files are float64, column-major, shape (N, K); the .json gives N and the column names.
-Default box: x -12..23 mm, r 0..30 mm.
+Default box: x -12..23 mm, r 0..30 mm. (The box is an env var: pvbatch mangles negative numbers in argv.)
 """
 import json
+import os
 import sys
 
 import numpy as np
@@ -17,7 +18,7 @@ from paraview import servermanager as sm
 from vtk.util.numpy_support import vtk_to_numpy
 
 stage, out = sys.argv[1], sys.argv[2]
-xmin, xmax, rmax = [float(v) * 1e-3 for v in (sys.argv[3:6] if len(sys.argv) >= 6 else (-12, 23, 30))]
+xmin, xmax, rmax = [float(v) * 1e-3 for v in os.environ.get("GSA_BOX", "-12,23,30").split(",")]
 
 
 def fetch(reader):
