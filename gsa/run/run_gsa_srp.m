@@ -58,15 +58,17 @@ for m = m_list
         Wd = diag(W);
         E  = sum(abs(V).^2 .* Wd, 1);
         f_sponge = sum(abs(V(sp,:)).^2 .* Wd(sp), 1) ./ E;   % energy fraction in the sponges
+        [f_grid, f_shock] = mode_metrics(V, Wd, mesh, info.shock);
         pair = nan(numel(w), 1);
         if ~isempty(wa), for j = 1:numel(w), pair(j) = min(abs(w(j) - conj(wa))); end, end
         [~, ord] = sort(imag(w), 'descend');
         T = table((1:numel(w))', w(ord), real(w(ord))/(2*pi), f_Hz(w(ord))/1e3, imag(w(ord)), ...
-                  si.resid_direct(ord).', f_sponge(ord).', pair(ord), ...
-                  'VariableNames', {'k','omega','St_D','f_kHz','growth','resid','sponge_frac','adj_pair_dist'});
+                  si.resid_direct(ord).', f_sponge(ord).', f_grid(ord).', f_shock(ord).', pair(ord), ...
+                  'VariableNames', {'k','omega','St_D','f_kHz','growth','resid','sponge_frac', ...
+                                    'grid_frac','shock_frac','adj_pair_dist'});
         fprintf('m = %d, shift %s: %d modes, max residual %.1e, solve %.0f s\n', m, num2str(sigma), ...
                 numel(w), max(si.resid_direct), si.t_total_s);
-        disp(T(1:min(12, height(T)), :));
+        disp(T(1:min(20, height(T)), :));
 
         % save
         keep = ord(1:min(o.nsave, numel(ord)));
@@ -86,6 +88,34 @@ end
 end
 
 % ------------------------------------------------------------------------------------------------
+function [f_grid, f_shock] = mode_metrics(V, Wd, mesh, shock)
+% Diagnostics to separate numerical from physical modes (energy-norm weighted, all 5 variables):
+%  f_grid  : fraction of the energy at grid scale, |q - S q|^2 / |q|^2, with S the masked 3x3 [1 2 1]x[1 2 1]/16
+%            filter (a pure 2h checkerboard gives ~1; a smooth mode gives O(h^2))
+%  f_shock : fraction of the energy within 3 cells of the shock-sensor points
+ng = mesh.ngp; u = mesh.usedInd; sz = size(mesh.X);
+fluid = false(sz); fluid(u) = true;
+k1 = [1 2 1]; K = (k1' * k1) / 16;
+den = conv2(double(fluid), K, 'same');
+band = imdilate(shock, strel('square', 7)) & fluid;
+inband = repmat(band(u), 5, 1);
+nm = size(V, 2);
+f_grid = zeros(1, nm); f_shock = zeros(1, nm);
+for k = 1:nm
+    q = V(:, k);
+    Etot = sum(abs(q).^2 .* Wd);
+    Eg = 0;
+    for v = 1:5
+        g = zeros(sz); g(u) = q((v-1)*ng + (1:ng));
+        s = conv2(g, K, 'same') ./ max(den, eps);
+        d = g(u) - s(u);
+        Eg = Eg + sum(abs(d).^2 .* Wd((v-1)*ng + (1:ng)));
+    end
+    f_grid(k)  = Eg / Etot;
+    f_shock(k) = sum(abs(q(inband)).^2 .* Wd(inband)) / Etot;
+end
+end
+
 function P = pressure_modes(V, BF, mesh, ref)
 % p' = (rho' T + rho T') / (kappa Ma^2), q = [rho, u, v, w, T]
 ng = mesh.ngp; u = mesh.usedInd;
