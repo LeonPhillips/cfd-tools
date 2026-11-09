@@ -83,3 +83,33 @@ own implementation of the design described in its README (user, 2026-11-09).
   | | **mumps** | **335 s** (factorise 14.5 s, factors 12.4 GB) | **17.0 GB** | residuals 1.5e-12 / 2.7e-16 |
 
   Max eigen-residuals ||L v - w v|| / (||L||_1 ||v||): 2.1e-13 direct, 1.7e-13 adjoint (same as UMFPACK).
+
+## Operator: `operator/` (axisymmetric LNS with variable mean viscosity, 2026-11-09)
+
+Route C: LinStab2D's axisymmetric operator, regenerated symbolically so that grad(mu_bar) comes from the total
+viscosity field.
+
+- `derive_axy_lns.m` (Symbolic Math Toolbox, ~25 s): linearises the conservative axisymmetric compressible NS
+  equations in LinStab2D's form (q = [rho, U_r, V_theta, W_z, T], p = rho T/c2, E = cv T + |u|^2/2, stress/Re,
+  heat flux -(mu/c1) grad T, exp(1i m theta)) and writes two coefficient scripts (generated, don't edit):
+  - `getCoeffsAxyMuT.m`: mu = mu(T), grad(mu_bar) = dmudT grad(T_bar)
+  - `getCoeffsAxyVarMu.m`: mu_bar = MU(x, r) any field; grad(mu_bar) from inputs dMUdr, dMUdz; mu' = dmudT T'
+    (Sutherland only, frozen eddy viscosity); heat conduction with the total MU (Pr_eff = Pr)
+- `GetLinProblemVarMu.m`: GetLinProblem('axy') with a selectable coefficient script (default VarMu). dMUdx/dMUdr
+  default to mesh.Dx*MU, mesh.Dy*MU.
+- `BC_DirichletRowOnly.m`: the method's row-only Dirichlet (penalty 1e8).
+
+**Checks (m3f102, `GSA/operator_dev/`):**
+
+- Coefficients at 200 random points (`test_coeffs_vs_upstream.m`):
+  - 171 of 175 coefficients equal LinStab2D's `getCoeffsLaminar.m` to round-off.
+  - The 4 that differ are A0_25, A0_35, A0_45, A0_55 (relative 2e-1, 4e-2, 1e-2, 2e-3 on random inputs). With
+    dmudT = 0 all 175 agree (4e-16), and the difference does not depend on m or d2mudT2.
+  - So **upstream LinStab2D omits mu' x (base viscous stress) terms**: mu' div(tau_bar) in momentum and the matching
+    viscous-work terms in energy. It keeps the grad(mu') and 1i m mu' terms. The supervisor's `GetOperators.m`
+    includes these terms (e.g. `dmu_dT * d2u_dyy` in L25), and so does our derivation.
+  - VarMu with grad(MU) = chain rule equals MuT to 2e-16. With MU + constant it equals MuT with that MU.
+- Operator on example_5_Paraboloid (`test_operator_paraboloid.m`, m = 0 and 5, 10,000 points):
+  - Our assembly with upstream's coefficient script equals `GetLinProblem('axy')` exactly (wiring check).
+  - With dmudT = 0, MuT equals upstream to 1e-16. VarMu with chain-rule gradients equals MuT to 2e-20.
+  - The full linearisation vs upstream: 6e-7 relative (Ma 0.01, so T hardly varies there).
