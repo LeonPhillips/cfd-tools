@@ -31,20 +31,38 @@ fprintf('grid: h = %.4f mm, Nx = %d, Nr = %d, x %.3f..%.3f mm, dr = %.4f mm\n', 
 %% --- mask: body cylinder behind the face, plus the lip/nozzle block up to the exit plane (solid = true)
 tol = 1e-6 * h;
 solid = (X < p.x_face_mm*mm & Y < p.r_body_mm*mm) | (X < xe - tol & Y < p.r_lip_out_mm*mm);
+use_nozzle = isfield(p, 'nozzle_interior') && p.nozzle_interior;
+if use_nozzle
+    % open the nozzle bore (plenum inlet x_inlet .. exit plane) using the wall contour from the mesh
+    rin = nozzle_inner_radius(p.baseflow_prefix, X(1,:) / mm, p.x_inlet_mm, p.x_exit_mm) * mm;   % per column
+    bore = X >= p.x_inlet_mm*mm - tol & X < xe - tol & Y < repmat(rin, size(X,1), 1);
+    solid = solid & ~bore;
+    solid = clean_mask(solid);              % no fluid runs shorter than 3 points (FD stencils)
+end
 mesh  = MeshMask(cmesh, double(solid));
 mesh.mask = solid;
 Xu = X(mesh.usedInd); Yu = Y(mesh.usedInd);
 
 % boundary sets
 mi = mesh.idx.mi;
-ji = mi(abs(Xu(mi) - xe) < tol & Yu(mi) < p.r_exit_mm*mm);
+if use_nozzle
+    % plenum inlet face: the first open column of the bore (subsonic total-conditions inlet in SU2)
+    xcol = min(Xu(Yu < p.r_lip_out_mm*mm & Xu < p.x_face_mm*mm));
+    ji = mi(abs(Xu(mi) - xcol) < tol & Yu(mi) < p.r_plenum_mm*mm - h);
+    jname = 'ni';
+else
+    ji = mi(abs(Xu(mi) - xe) < tol & Yu(mi) < p.r_exit_mm*mm);
+    jname = 'ji';
+end
 wi = setdiff(mi, ji);
-idx = struct('li', mesh.idx.li, 'ri', mesh.idx.ri, 'ti', mesh.idx.ti, 'ji', ji(:), 'wi', wi(:));
+idx = struct('li', mesh.idx.li, 'ri', mesh.idx.ri, 'ti', mesh.idx.ti, 'wi', wi(:));
+idx.(jname) = ji(:);
 idx.li = setdiff(idx.li, [ji; wi]);         % edges that are also walls stay walls
 idx.ti = setdiff(idx.ti, idx.ri);           % corner (x max, r max) belongs to the inflow
 mesh.idx = idx;
-fprintf('mask: %d fluid points (%d masked); ji %d, wi %d, li %d, ri %d, ti %d\n', mesh.ngp, nnz(solid), ...
-        numel(idx.ji), numel(idx.wi), numel(idx.li), numel(idx.ri), numel(idx.ti));
+mesh.inflow_set = jname(1);                 % 'n' (plenum inlet) or 'j' (exit plane)
+fprintf('mask: %d fluid points (%d masked); %s %d, wi %d, li %d, ri %d, ti %d\n', mesh.ngp, nnz(solid), ...
+        jname, numel(ji), numel(idx.wi), numel(idx.li), numel(idx.ri), numel(idx.ti));
 
 % wall normals for Neumann conditions (axis-aligned, pointing into the fluid, from the 4 neighbours)
 mesh.wall_normal = wall_normals(solid, mesh.usedInd(idx.wi));
@@ -122,6 +140,43 @@ fprintf('case built in %.0f s: %d fluid points, %d DOF\n', toc(t0), mesh.ngp, 5*
 end
 
 % ------------------------------------------------------------------------------------------------
+function rin = nozzle_inner_radius(prefix, xcols_mm, x_inlet_mm, x_exit_mm)
+% Inner radius of the nozzle/plenum at each grid column (mm), from the wall_noslip segments: the smallest r
+% at which a wall segment crosses x = const (the lip outer surface is larger, so min picks the inner wall).
+m = jsondecode(fileread([prefix '_wall.json']));
+fid = fopen([prefix '_wall.bin'], 'r'); a = fread(fid, [m.N, 4], 'double'); fclose(fid);
+a = a * 1e3;                                % mm: x0 r0 x1 r1
+rin = zeros(size(xcols_mm));
+for j = 1:numel(xcols_mm)
+    x = xcols_mm(j);
+    if x < x_inlet_mm - 1e-9 || x >= x_exit_mm, continue; end
+    lo = min(a(:,1), a(:,3)); hi = max(a(:,1), a(:,3));
+    s = find(lo <= x & hi >= x & max(a(:,2), a(:,4)) < 3.2);
+    if isempty(s), continue; end
+    t = (x - a(s,1)) ./ (a(s,3) - a(s,1)); t(~isfinite(t)) = 0;
+    r = a(s,2) + t .* (a(s,4) - a(s,2));
+    rin(j) = min(r);
+end
+end
+
+function solid = clean_mask(solid)
+% make fluid runs shorter than 3 points (in x or r) solid, so every FD segment has >= 3 points
+for it = 1:20
+    old = solid;
+    for dim = 1:2
+        F = ~solid; if dim == 2, F = F.'; end
+        for i = 1:size(F, 1)
+            d = diff([false, F(i,:), false]);
+            s = find(d == 1); e = find(d == -1) - 1;
+            for k = find(e - s + 1 < 3), F(i, s(k):e(k)) = false; end
+        end
+        if dim == 2, F = F.'; end
+        solid = ~F;
+    end
+    if isequal(old, solid), break; end
+end
+end
+
 function S = read_bin(prefix)
 m = jsondecode(fileread([prefix '_flow.json']));
 fid = fopen([prefix '_flow.bin'], 'r');

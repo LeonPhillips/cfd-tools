@@ -18,7 +18,7 @@ for k = 1:numel(S.keep)
     s = sprintf('mode %d omega %.3f%+.3fi: max|p''| at (%.2f, %.2f) mm;', k, real(S.omega(S.keep(k))), ...
                 imag(S.omega(S.keep(k))), X(i), Y(i));
     for f = fieldnames(zone)', s = [s sprintf(' %s %.2f', f{1}, sum(e(zone.(f{1})))/E)]; end %#ok<AGROW>
-    for b = {'ri','ji','wi','li','ti'}
+    for b = fieldnames(mesh.idx)'
         near = false(ng, 1); near(mesh.idx.(b{1})) = true;
         s = [s sprintf(' | at %s %.2f', b{1}, sum(e(near))/E)]; %#ok<AGROW>
     end

@@ -4,7 +4,7 @@ function p = srp_case_defaults()
 % local shock smoothing (method), D and freestream scaling. Smoothing widths and sponge sizes below are
 % first choices, to be confirmed from the check plots.
 
-p.baseflow_prefix = '/scratch/qk75/LeonPhillips/PhD/GSA/srp_p0j6.6_meshFine_t3/baseflow/su2';
+p.baseflow_prefix = '/scratch/qk75/LeonPhillips/PhD/GSA/srp_p0j6.6_meshFine_t3/baseflow/su2L';   % x -30..23 mm export
 
 % reference (freestream, from t3_cap3.cfg; see gsa/README.md)
 p.D = 0.018;
@@ -17,9 +17,16 @@ p.x_face_mm    = 0.496;   % body front face
 p.r_body_mm    = 9.0;     % body radius
 p.r_lip_out_mm = 2.88;    % lip (nozzle tube) outer radius, x 0.496..1.876
 p.r_exit_mm    = 2.27;    % nozzle exit radius (inner contour before the lip fillet)
+p.x_inlet_mm   = -8.124;  % plenum inlet face (SU2 inlet_jet, total conditions)
+p.r_plenum_mm  = 2.879;   % plenum radius
+
+% nozzle interior (user, 2026-11-10): model the plenum + converging-diverging nozzle up to the inlet face.
+% The inner wall is staircased from the mesh's wall contour. Inlet perturbation BC: Dirichlet on all
+% variables (method's inlet) - to be confirmed.
+p.nozzle_interior = true;
 
 % domain and grid
-p.x_range_mm = [-9 20];
+p.x_range_mm = [-27 20];  % outflow moved from -9 to -27 mm (user, 2026-11-10)
 p.r_max_mm   = 27;
 p.h_mm       = 0.1;       % 0.1 smoke test, 0.07 sweep, 0.05 production, 0.04 grid check
 
@@ -35,6 +42,6 @@ p.smooth = struct('sensor_sigma_mm', 0.15, 'threshold', 0.15, 'filter_sigma_mm',
 
 % sponges (method's GetSponge shape; widths/transitions in mm)
 p.sponge = struct('amp_in', 5,  'width_in_mm', 3,  'trans_in_mm', 1, ...   % freestream inflow, x max
-                  'amp_out', 1.5, 'width_out_mm', 3, 'trans_out_mm', 1, ... % outflow, x min
+                  'amp_out', 1.5, 'width_out_mm', 12, 'trans_out_mm', 4, ... % outflow, x min: long and gentle (method-like)
                   'amp_top', 5, 'width_top_mm', 3, 'trans_top_mm', 1);      % top, r max
 end

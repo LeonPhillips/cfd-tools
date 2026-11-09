@@ -15,13 +15,14 @@ f = figure('Position', [0 0 1500 650]);
 subplot(1,2,1); hold on;
 Xu = mesh.X(mesh.usedInd)/mm; Yu = mesh.Y(mesh.usedInd)/mm;
 plot(X(solid), Y(solid), 's', 'Color', [.75 .75 .75], 'MarkerSize', 2, 'MarkerFaceColor', [.75 .75 .75]);
-c = struct('ji', 'r', 'wi', 'k', 'li', 'b', 'ri', 'm', 'ti', 'g');
+c = struct('ji', 'r', 'ni', 'r', 'wi', 'k', 'li', 'b', 'ri', 'm', 'ti', 'g');
 for b = fieldnames(c)'
+    if ~isfield(mesh.idx, b{1}), continue; end
     k = mesh.idx.(b{1}); plot(Xu(k), Yu(k), '.', 'Color', c.(b{1}), 'MarkerSize', 8, 'DisplayName', b{1});
 end
 k = mesh.idx.wi; quiver(Xu(k), Yu(k), mesh.wall_normal(:,1), mesh.wall_normal(:,2), 0.3, 'k');
-axis equal; xlim([-1.5 3.5]); ylim([0 4]); grid on; xlabel('x (mm)'); ylabel('r (mm)');
-title(sprintf('mask (grey), ji red, wi black + normals; h = %.3f mm', p.h_mm));
+axis equal; xlim([-9 3.5]); ylim([0 4]); grid on; xlabel('x (mm)'); ylabel('r (mm)');
+title(sprintf('mask (grey), inflow red, walls black + normals; h = %.3f mm', p.h_mm));
 subplot(1,2,2);
 s = mesh.sponge; s(solid) = NaN;
 pcolor(X, Y, s); shading flat; axis equal tight; colorbar; xlabel('x (mm)'); ylabel('r (mm)');
@@ -30,7 +31,7 @@ exportgraphics(f, fullfile(outdir, [tag '_grid_sponge.png']), 'Resolution', 110)
 
 %% 2. Mach raw / smoothed / sensor / mu_t
 f = figure('Position', [0 0 1600 1000]);
-lim = {[-3 18], [0 12]};
+lim = {[-10 18], [0 12]};
 ax = subplot(2,2,1); pcolor(X, Y, Mr); shading flat; axis equal; xlim(lim{1}); ylim(lim{2}); colorbar; caxis([0 4]);
 title('Mach, interpolated (raw)'); colormap(ax, turbo);
 ax = subplot(2,2,2); pcolor(X, Y, Ms); shading flat; axis equal; xlim(lim{1}); ylim(lim{2}); colorbar; caxis([0 4]);
