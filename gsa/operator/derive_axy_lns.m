@@ -24,7 +24,8 @@ if nargin < 1, outdir = pwd; end
 t0 = tic;
 
 syms r z th m ep real
-syms Re c1 c2 cv positive
+Re = sym('Re', 'positive'); c1 = sym('c1', 'positive');   % sym(), not syms: 'cv' is a MATLAB function
+c2 = sym('c2', 'positive'); cv = sym('cv', 'positive');
 syms RHOb(r,z) Ub(r,z) Vb(r,z) Wb(r,z) Tb(r,z) MUb(r,z) dmudTb(r,z)
 syms rh(r,z) uh(r,z) vh(r,z) wh(r,z) Th(r,z)
 
@@ -95,7 +96,9 @@ for j = 1:5
 end
 
 % base-flow names (LinStab2D's)
-syms U V W RHO Tn MU dmudT d2mudT2 dMUdr dMUdz R real
+mk = @(s) sym(s, 'real');
+U = mk('U'); V = mk('V'); W = mk('W'); RHO = mk('RHO'); Tn = mk('Tn'); MU = mk('MU');
+dmudT = mk('dmudT'); d2mudT2 = mk('d2mudT2'); dMUdr = mk('dMUdr'); dMUdz = mk('dMUdz'); R = mk('R');
 base = {Ub,'U'; Vb,'V'; Wb,'W'; RHOb,'RHO'; Tb,'T'};
 for k = 1:size(base,1)
     f = base{k,1}; nm = base{k,2};
