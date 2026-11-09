@@ -69,7 +69,7 @@ end
 % --- compare against the reference (builtin if run, else the first solver)
 ref = modes{1};
 fid = fopen(fullfile(outdir, sprintf('validate_cavity_F%g.txt', F)), 'w');
-pr = @(varargin) cellfun(@(f) fprintf(f, varargin{:}), {1, fid});
+pr = @(varargin) [fprintf(1, varargin{:}), fprintf(fid, varargin{:})];
 pr('cavity F = %g, n = %d, nnz = %d, nEig = %d, sigma = %s, reference = %s\n', F, n, nnz(L0), nEig, num2str(omega_target), ref);
 for k = 1:numel(modes)
     m = modes{k};
