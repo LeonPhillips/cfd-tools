@@ -23,6 +23,16 @@ for k = 1:numel(S.keep)
         s = [s sprintf(' | at %s %.2f', b{1}, sum(e(near))/E)]; %#ok<AGROW>
     end
     disp(s);
+    % energy by variable, and the grid-scale part of each (masked [1 2 1]^2 filter, as mode_metrics)
+    ev = sum(reshape(abs(q).^2 .* Wd, ng, 5), 1) / E;
+    eg = zeros(1, 5); sz = size(mesh.X); fl = false(sz); fl(u) = true;
+    K = [1 2 1]' * [1 2 1] / 16; den = conv2(double(fl), K, 'same');
+    for v = 1:5
+        g = zeros(sz); g(u) = q((v-1)*ng + (1:ng)); sm = conv2(g, K, 'same') ./ max(den, eps);
+        eg(v) = sum(abs(g(u) - sm(u)).^2 .* Wd((v-1)*ng + (1:ng))) / E;
+    end
+    fprintf('   energy rho %.2f u %.2f v %.2f w %.2f T %.2f | grid-scale part rho %.2f u %.2f v %.2f w %.2f T %.2f\n', ...
+            ev, eg);
 end
 set(0, 'DefaultFigureVisible', 'off');
 f = figure('Position', [0 0 1500 900]);
