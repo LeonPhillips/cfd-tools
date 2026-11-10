@@ -223,3 +223,23 @@ Fixes found on the way (cfd-tools 1837142):
     (1.3275+0.7080i -> 1.3334+0.7114i, 2.2513+0.6753i -> 2.2513+0.6750i). Only one mode (1.8147+0.8035i) went away.
   - So these are tied to the body-side wall boundary layer in the outflow region, not to the outflow BC type, the
     sponge strength, or the distance from the jet.
+
+## Body-side slip wall (user, 2026-11-10)
+
+- The r = 9 mm cylinder behind the face (x < 0.496 mm) is a slip wall (`si`): v' = 0, zero normal gradient for
+  rho, u, w, T. The base-flow boundary layer within 0.5 mm of it is replaced by the values at 9.5 mm.
+- Check: `figures/newFigs/2026-11-10_srp_GSA_p0j6.6_case-slip-h0p1_bodyside.png`. The sharp viscous layer is ~0.5 mm;
+  the outer Mach rise up to ~10.5 mm is kept.
+- **GSA (shift 2+0.1i; `slip_h0p1`, `slip05_h0p05`; h 0.05: 65 GB peak, 35 min for both m):**
+  - The outflow-corner localisation is gone: sponge fractions are now 0.02-0.3, down from ~1.
+  - But the leading eigenvalues are the same as in the no-slip runs (h 0.05, m 0: 1.4326+1.199i, 1.1735+0.746i,
+    2.8138+0.678i, 1.9958+0.628i, ...).
+  - Their eigenvectors are now almost pure grid-scale content (grid_frac 0.95-0.99), at:
+    - the bow shock (11.7, 8.8)
+    - the triple point (7.3, 4.5)
+    - the axis barrel-shock crossing (4.8, 0)
+    - the Mach disk (8.2-8.5, 0.7-1.8)
+    - the nozzle converging wall (-1.8, 2.6)
+  - Earlier their maxima sat at the outflow corner. They are grid-dependent (different at h 0.1), so they are
+    numerical: odd-even modes of the central differences at shocks and steep gradients. The eigenvector maximum
+    follows whichever boundary closure lets it grow most.
