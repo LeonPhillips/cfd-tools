@@ -6,7 +6,8 @@ function R = run_gsa_srp(outdir, h_mm, m_list, shifts, varargin)
 %     m_list  azimuthal wavenumbers, e.g. [0 1]
 %     shifts  complex eigenvalue targets omega (omega = 2 pi f D / U_inf; Im > 0 = growth)
 %   options: 'nEig' (50), 'p' (300), 'tol' (1e-8), 'adjoint' (true), 'nsave' (8 modes saved/plotted),
-%            'solver' ('mumps'), 'case' (struct of overrides for srp_case_defaults, e.g. struct('sigma_visc',0.5))
+%            'solver' ('mumps'), 'case' (struct of overrides for srp_case_defaults, e.g. struct('sigma_visc',0.5)),
+%            'outflow_bc' ('neumann'), 'alpha_rho' (0; density damping on rho', x and r)
 %
 % For each m: build the case (build_srp_case), the operator (GetLinProblemVarMu, full linearisation),
 % the boundary conditions, then for each shift solve with eigs_shift_invert (one MUMPS factorisation shared
@@ -17,7 +18,8 @@ function R = run_gsa_srp(outdir, h_mm, m_list, shifts, varargin)
 % r max (t). Axis: LinStab2D symmetric/antisymmetric derivatives for the given m.
 
 o = struct('nEig', 50, 'p', 300, 'tol', 1e-8, 'adjoint', true, 'nsave', 8, 'solver', 'mumps', 'case', struct(), ...
-           'outflow_bc', 'neumann');   % x-min outflow: 'neumann' (method) or 'dirichlet' (LinStab2D examples)
+           'outflow_bc', 'neumann', ...   % x-min outflow: 'neumann' (method) or 'dirichlet' (LinStab2D examples)
+           'alpha_rho', 0);               % density damping (method: 3e-5 or 1e-4), see GetLinProblemVarMu
 for k = 1:2:numel(varargin), o.(varargin{k}) = varargin{k+1}; end
 if ~exist(outdir, 'dir'), mkdir(outdir); end
 fls_mumps_available();
@@ -33,7 +35,7 @@ htag = strrep(sprintf('%g', h_mm), '.', 'p');
 R = struct('m', {}, 'shift', {}, 'omega', {}, 'omega_adj', {}, 'info', {});
 for m = m_list
     t0 = tic;
-    [L0, idx] = GetLinProblemVarMu(mesh, BF, m);
+    [L0, idx] = GetLinProblemVarMu(mesh, BF, m, struct('alpha_rho', o.alpha_rho));
     [L0, dD1] = BC_DirichletRowOnly(L0, idx, {'r', mesh.inflow_set}, {'rho','u','v','w','T'}, 1e8);
     [L0, dD2] = BC_DirichletRowOnly(L0, idx, {'w'}, {'u','v','w'}, 1e8);
     [L0, dN1] = BC_NeumannRows(L0, mesh, idx, {'w'}, {'T'}, 1e4);
@@ -88,7 +90,8 @@ for m = m_list
         P = pressure_modes(modes, BF, mesh, pc.ref);
         S = struct('m', m, 'shift', sigma, 'omega', w, 'omega_adj', wa, 'table', T, 'solver', si, ...
                    'modes', modes, 'p_modes', P, 'keep', keep, 'h_mm', h_mm, 'case_params', pc, ...
-                   'n', size(L0,1), 'nnz', nnz(L0), 't_build_s', t_build, 'bc_dofs', numel(bcdofs));
+                   'n', size(L0,1), 'nnz', nnz(L0), 't_build_s', t_build, 'bc_dofs', numel(bcdofs), ...
+                   'alpha_rho', o.alpha_rho, 'outflow_bc', o.outflow_bc);
         if ~isempty(Va), S.modes_adj = Va(:, keep); end
         tag = sprintf('gsa_h%s_m%d_s%d', htag, m, ks);
         save(fullfile(outdir, [tag '.mat']), '-struct', 'S', '-v7.3');

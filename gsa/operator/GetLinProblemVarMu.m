@@ -16,6 +16,7 @@ function [L0, idx] = GetLinProblemVarMu(mesh, BF, m, opts)
 %   BF.Re, BF.Ma, BF.Pr, BF.kappa, BF.cv, BF.c1, BF.c2 as in LinStab2D
 % opts.coeffs: coefficient script (default 'getCoeffsAxyVarMu'; 'getCoeffsAxyMuT' or
 %              'getCoeffsLaminar' reproduce upstream LinStab2D).
+% opts.alpha_rho: density damping coefficient (default 0; method values 3e-5, 1e-4), see below.
 
 if nargin < 4, opts = struct(); end
 if ~isfield(opts, 'coeffs'), opts.coeffs = 'getCoeffsAxyVarMu'; end
@@ -107,6 +108,30 @@ L0 = (RHS/1i)\LHS;
 if isfield(mesh, 'sponge')
     sponge  = mesh.sponge(mesh.usedInd);
     L0 = L0 - spdiags(repmat(sponge(:), 5, 1), 0, ngp*5, ngp*5);
+end
+
+% density damping (supervisor's alpha_rho term, extended to both directions): added to the rho' equation
+%   D_rho = -alpha_rho * ( hz^3 H^-1 D2z' H D2z + hr^3 H^-1 D2r' H D2r ),  H = diag(W r)  (axisymmetric weights)
+% so that rho'* H D_rho rho' = -alpha_rho (hz^3 |D2z rho'|^2_H + hr^3 |D2r rho'|^2_H) <= 0 (dissipative).
+% D2r is the parity-correct r second derivative of a scalar for this m (block 1 of D2R). The method applies the
+% y term only; the scaling h^3 makes the damping vanish as h^-1 at grid scale and as h^3 k^4 for resolved waves.
+if isfield(opts, 'alpha_rho') && opts.alpha_rho ~= 0
+    a  = opts.alpha_rho;
+    hz = median(diff(unique(round(mesh.X(mesh.usedInd), 12))));
+    hr = median(diff(unique(round(mesh.Y(mesh.usedInd), 12))));
+    Hv = mesh.W(mesh.usedInd) .* mesh.Y(mesh.usedInd); Hv = Hv(:);
+    assert(all(isfinite(Hv) & Hv > 0), 'GetLinProblemVarMu: invalid quadrature weights for alpha_rho');
+    H  = spdiags(Hv, 0, ngp, ngp); Hi = spdiags(1./Hv, 0, ngp, ngp);
+    D2rs = D2R(1:ngp, 1:ngp);
+    Drho = -a * (hz^3 * (Hi * (D2z' * H * D2z)) + hr^3 * (Hi * (D2rs' * H * D2rs)));
+    L0(1:ngp, 1:ngp) = L0(1:ngp, 1:ngp) + Drho;
+    % report the damping rate of a grid-scale checkerboard and of a smooth field (Rayleigh quotients in H)
+    [iy, ix] = ind2sub(size(mesh.X), mesh.usedInd(:));
+    rq = @(q) -real(q' * H * (Drho * q)) / real(q' * H * q);
+    qc = (-1).^(ix + iy);
+    qs = cos(2*pi*mesh.X(mesh.usedInd(:)) / 0.11);          % axial wavelength 0.11 D (~2 mm)
+    fprintf('\n--- alpha_rho = %.1e (hz %.3e, hr %.3e): damping rate checkerboard %.3f, 2 mm wave %.2e', ...
+            a, hz, hr, rq(qc), rq(qs));
 end
 
 % back to the mesh CS: q = [rho, u(axial), v(radial), w(azimuthal), T]
