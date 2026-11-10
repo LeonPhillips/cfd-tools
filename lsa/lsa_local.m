@@ -44,7 +44,9 @@
 %          'single'      : one station, one St: full spectrum, mode labels, eigenfunctions (for looking)
 %          'sensitivity' : a few stations/St with N, r_max and smoothing varied (is the answer converged?)
 %          'scan'        : all stations x all St x m = 0, 1 (the main result)
-%   Optional workspace variables: BASEFLOW_DIR, OUT_DIR (default to the M3 paths below), NWORKERS.
+%          'profiles'    : all stations, base-flow profiles and fits only (no eigenvalues): check the tanh fits
+%   Optional workspace variables: BASEFLOW_DIR, OUT_DIR (default to the M3 paths below), NWORKERS,
+%   PROFILE ('tanh', the default: Tran's fitted profiles; or 'smooth': the smoothed RANS profile).
 %
 % OUTPUT: <OUT_DIR>/<MODE>/ : a .mat file with everything, PNG figures, and a text log.
 %
@@ -88,6 +90,16 @@ S.N_check  = 300;                                       % second resolution: mod
 S.conv_tol = 1e-3;                                      % relative |alpha_N - alpha_Ncheck| / |alpha| to count as converged
 S.dr_fine_mm  = 0.005;                                  % spacing of the fine uniform line used to sample the RANS data [mm]
 S.smooth_mm   = 0.05;                                   % smoothing length l [mm] (about one RANS cell in the plume box)
+
+% --- which base-flow profile the operator uses (user, 2026-11-10: Tran's tanh fit, kept as a switch)
+%   'tanh'   : Tran et al. 2026 eqs. 3.1-3.3: two tanh shear layers per variable, fitted to the RANS profile
+%              (removes the barrel-shock jumps inside the jet, which smoothing cannot remove without also
+%              blurring the thin shear layer; the sensitivity run of 2026-11-10 showed that problem)
+%   'smooth' : the Whittaker-smoothed RANS profile itself
+if exist('PROFILE', 'var'), S.profile = PROFILE; else, S.profile = 'tanh'; end
+S.fit_delta0_mm = [0.1 0.3 1.0];                        % starting half-thicknesses tried for each shear layer [mm]
+S.fit_delta_min_mm = 0.05;                              % thinnest allowed layer [mm]: one RANS cell; thinner is a
+                                                        % fit snapping onto a jump, not a resolved shear layer
 S.rmax_gap_mm = 0.5;                                    % r_max = (bow-shock radius) - gap - 3*l   [mm]
 S.clu_amp  = [30 8];                                    % mapping: extra point density at [jet, outer] shear layer
 S.clu_wid_mm = [0.4 1.0];                               % mapping: width of each cluster [mm]
@@ -153,6 +165,7 @@ switch S.mode                                           % which stations does th
     case 'single',      xs_mm = S.single_x_mm;
     case 'sensitivity', xs_mm = S.sens_x_mm;
     case 'scan',        xs_mm = S.x_mm;
+    case 'profiles',    xs_mm = S.x_mm;                 % profiles only: check the fits, no eigenvalues
     otherwise, error('unknown MODE %s', S.mode);
 end
 keep = xn > (min(xs_mm) - 0.5)*1e-3/S.D_ref & xn < (max(xs_mm) + 0.5)*1e-3/S.D_ref;  % only nodes near the stations
@@ -168,8 +181,15 @@ for k = 1:numel(xs_mm)
     prof = [prof, prof_k]; %#ok<AGROW>
     fprintf('x = %.2f mm: jet layer r1 = %.3f mm, outer layer r2 = %.3f mm, bow shock %.2f mm, r_max = %.2f mm\n', ...
         xs_mm(k), prof_k.r1*S.D_ref*1e3, prof_k.r2*S.D_ref*1e3, prof_k.r_bs*S.D_ref*1e3, prof_k.rmax*S.D_ref*1e3);
+    if strcmp(S.profile, 'tanh')                        % fit quality: Tran reports R^2 > 0.97 for every variable
+        fprintf('            tanh fit R^2: U %.4f, rho %.4f, p %.4f\n', prof_k.fit.U.R2, prof_k.fit.rho.R2, prof_k.fit.p.R2);
+    end
 end
-plot_profiles(prof, S);                                 % raw vs smoothed profiles, with r1, r2, r_max marked
+plot_profiles(prof, S);                                 % raw vs used profiles, with r1, r2 marked
+if strcmp(S.mode, 'profiles')                           % this mode stops here
+    save(fullfile(S.out_dir, 'lsa_profiles.mat'), 'prof', 'S');
+    diary off; return;
+end
 
 %% 6. Solve the eigenvalue problems -------------------------------------------------------------------------------
 % omega in our units: omega = 2*pi*f*D/a_inf = 2*pi*St_D*(U_inf/a_inf) = 2*pi*St_D*M_inf.
@@ -198,6 +218,7 @@ switch S.mode
                      'rmax-2.5mm',  struct('rmax_gap_mm', S.rmax_gap_mm + 2.5);
                      'smooth0.025', struct('smooth_mm', 0.025);
                      'smooth0.10',  struct('smooth_mm', 0.10) };
+        if strcmp(S.profile, 'tanh'), variants = variants(1:4, :); end   % smoothing does not enter a tanh fit
         T = {};                                         % rows of the results table
         for iv = 1:size(variants, 1)
             Sv = S; f = fieldnames(variants{iv, 2});    % copy the settings and apply this variant's changes
@@ -297,6 +318,77 @@ function P = radial_profile(x_mm, FU, Fnu, Fp, FM, S)
 
     P = struct('x_mm', x_mm, 'r', r, 'U', Us, 'nu', nus, 'p', ps, 'dU', dUs, 'dnu', dnus, 'dp', dps, ...
                'U_raw', U(in), 'nu_raw', nu(in), 'p_raw', p(in), 'r1', r1, 'r2', r2, 'r_bs', r_bs, 'rmax', rmax);
+
+    % --- Tran's analytic profiles (S.profile = 'tanh'): replace the smoothed profiles by two-tanh fits
+    if strcmp(S.profile, 'tanh')
+        d0 = S.fit_delta0_mm / L;                       % starting half-thicknesses in units of D
+        dmin = S.fit_delta_min_mm / L;                  % minimum half-thickness in units of D
+        fU = fit_tanh2(r, U(in),       r1, r2, d0, dmin);     % U(r)          (Tran eq. 3.1)
+        fR = fit_tanh2(r, 1./nu(in),   r1, r2, d0, dmin);     % rho(r) = 1/nu (Tran eq. 3.2 fits 1/nu, i.e. density)
+        fP = fit_tanh2(r, p(in),       r1, r2, d0, dmin);     % p(r)          (Tran eq. 3.3)
+        [P.U, P.dU] = eval_tanh2(fU, r);                % analytic values and exact r-derivatives
+        [rho, drho] = eval_tanh2(fR, r);
+        P.nu = 1 ./ rho; P.dnu = -drho ./ rho.^2;       % nu = 1/rho, so dnu/dr = -(drho/dr)/rho^2
+        [P.p, P.dp] = eval_tanh2(fP, r);
+        P.fit = struct('U', fU, 'rho', fR, 'p', fP);
+        P.r1 = fU.R(1); P.r2 = fU.R(2);                 % shear-layer radii of the U fit drive the grid mapping
+    end
+end
+
+function F = fit_tanh2(r, y, Rg1, Rg2, d0, dmin)
+% Fit Tran et al. (2026) eqs. 3.1-3.3, two tanh shear layers, to a profile y(r):
+%   y(r) = A1*T(r; R1, b1) + A2*T(r; R2, b2) + c,   T(r; R, b) = 0.5*(1 + tanh(b*(R/r - r/R)))
+% T is 1 on the axis, 1/2 at r = R and 0 far out, so A1 + A2 + c is the core value, A2 + c the value between the
+% layers and c the value outside. Tran writes A1 = (1-h)*w1 and A2 = h*w2 (h: inner/outer ratio, w: weight) and
+% fixes c at the ambient value (0 for U, 1 for 1/nu and p); here c is FITTED because outside the jet the srp
+% flow is the moving, compressed shock layer, not still ambient air. (Only A1, A2 are identifiable, not h and w.)
+% The model is linear in (A1, A2, c), so those come from linear least squares for each trial (R1, b1, R2, b2),
+% and fminsearch (base MATLAB) searches only the four layer parameters ("variable projection"). They are searched
+% as q = log([R1, delta1 - dmin, R2, delta2 - dmin]), so radii stay positive and no layer gets thinner than dmin.
+% A half-thickness delta corresponds to b = R/(2*delta): near r = R, b*(R/r - r/R) ~ -2*b*(r - R)/R.
+    ok = isfinite(y); r = r(ok); y = y(ok);
+    best = struct('cost', Inf);
+    for da = d0                                         % a few starting thicknesses (multi-start)
+        for db = d0
+            q0 = log([Rg1, da - dmin, Rg2, db - dmin]);
+            opt = optimset('MaxFunEvals', 4000, 'MaxIter', 4000, 'TolX', 1e-7, 'TolFun', 1e-12, 'Display', 'off');
+            q = fminsearch(@(q) tanh2_cost(q, r, y, dmin), q0, opt);
+            c = tanh2_cost(q, r, y, dmin);
+            if c < best.cost, best = struct('cost', c, 'q', q); end
+        end
+    end
+    [~, coef, R, b] = tanh2_cost(best.q, r, y, dmin);
+    F = struct('R', R, 'b', b, 'delta', R./(2*b), 'A', coef(1:2)', 'c', coef(3));   % delta: half-thicknesses
+    yf = eval_tanh2(F, r);
+    F.R2 = 1 - sum((y - yf).^2) / sum((y - mean(y)).^2);   % coefficient of determination
+end
+
+function [cost, coef, R, b] = tanh2_cost(q, r, y, dmin)
+% Sum of squared residuals of the best linear (A1, A2, c) for q = log([R1, delta1 - dmin, R2, delta2 - dmin]).
+    v = exp(q); dl = dmin + v([2 4]);                   % half-thicknesses, never below dmin
+    bb = v([1 3]) ./ (2*dl);                            % b = R/(2*delta)
+    [R, k] = sort(v([1 3])); b = bb(k);                 % keep R1 < R2 (inner layer first)
+    B = [tanhT(r, R(1), b(1)), tanhT(r, R(2), b(2)), ones(size(r))];
+    coef = B \ y;                                       % linear least squares for A1, A2, c
+    cost = sum((B*coef - y).^2);
+    if R(2) > r(end) || R(1) < 1e-4 || R(2) - R(1) < 1e-3, cost = cost * 10 + 1; end   % keep layers in the domain
+end
+
+function [y, dy] = eval_tanh2(F, r)
+% Value and exact derivative of a fitted two-tanh profile.
+    [T1, dT1] = tanhT(r, F.R(1), F.b(1));
+    [T2, dT2] = tanhT(r, F.R(2), F.b(2));
+    y  = F.A(1)*T1 + F.A(2)*T2 + F.c;
+    dy = F.A(1)*dT1 + F.A(2)*dT2;
+end
+
+function [T, dT] = tanhT(r, R, b)
+% T(r) = 0.5*(1 + tanh(b*(R/r - r/R))) and dT/dr = 0.5*sech^2(.)*b*(-R/r^2 - 1/R). At r = 0 the argument is
+% +infinity, T = 1 and dT = 0 (sech^2 underflows to exactly 0 before R/r^2 overflows, so no 0*Inf occurs).
+    rr = max(r, eps);
+    t  = tanh(b*(R./rr - rr/R));
+    T  = 0.5*(1 + t);
+    dT = 0.5*(1 - t.^2) .* b .* (-R./rr.^2 - 1/R);
 end
 
 function z = whittaker(y, lam)
@@ -635,12 +727,12 @@ function plot_profiles(prof, S)
             plot(prof(k).r*L, prof(k).([names{v} '_raw']), ':', 'Color', [.6 .6 .6]);
             plot(prof(k).r*L, prof(k).(names{v}));
         end
-        xlabel('r [mm]'); ylabel(ylab{v}); title([names{v} ': raw (grey dotted) and smoothed']);
+        xlabel('r [mm]'); ylabel(ylab{v}); title(sprintf('%s: RANS (grey dotted) and used (%s)', names{v}, S.profile));
         subplot(2, 3, v + 3); hold on;
         for k = 1:numel(prof), plot(prof(k).r*L, prof(k).(['d' names{v}])); end
         xlabel('r [mm]'); ylabel(['d' names{v} '/dr (1/D units)']);
     end
-    sgtitle(sprintf('srp\\_M2.5 LSA base-flow profiles, %d station(s), smoothing %.3f mm', numel(prof), S.smooth_mm));
+    sgtitle(sprintf('srp\\_M2.5 LSA base-flow profiles, %d station(s), profile = %s', numel(prof), S.profile));
     exportgraphics(f, fullfile(S.out_dir, 'lsa_profiles.png'), 'Resolution', 130); close(f);
 end
 

@@ -21,7 +21,12 @@ one output folder per mode).
    exported wall; throat r = 2.000 mm at x = 0). The axis is subsonic by x = 8.5 mm (Mach disk). Stations inside the
    nozzle are not included.
 5. r_max just inside the bow shock at each station (bow-shock radius - 0.5 mm - 3 smoothing lengths), Dirichlet there.
-6. Profiles smoothed with a Whittaker (penalised least-squares) smoother, cut-off length 0.05 mm; no tanh fit.
+6. Base-flow profile is a switch, `PROFILE` (user, 2026-11-10: Tran's tanh fit, left as a switch):
+   - `'tanh'` (default): Tran eqs. 3.1-3.3, two tanh layers per variable (U, rho, p), fitted by variable projection
+     (linear least squares for the amplitudes, `fminsearch` for R and thickness). Differences from Tran: the outer
+     constant is fitted (the outer gas is the moving shock layer, not still air), and no layer may be thinner than
+     0.05 mm half-thickness (one RANS cell; without this the fit snapped onto the lip and barrel-shock jumps).
+   - `'smooth'`: Whittaker (penalised least-squares) smoother, cut-off length 0.05 mm.
 7. m = 0 and 1; blind scan St_D 0.05-2 (experimental tones withheld).
 8. N = 250 Chebyshev points, clustered at the jet shear layer (r1) and the outer shear layer (r2). An eigenvalue
    counts only if the N = 300 solve reproduces it to 1e-3 (relative).
@@ -75,6 +80,14 @@ extrapolation lands 1.8-3.0 % (St_j 0.4) and 4.5-7.4 % (St_j 0.6) from the root,
 and its eigenfunction hardly decays in r; the Dirichlet condition at r_max reflects the radiation and the mode is
 lost among box modes. The same can affect weakly growing KH modes of the srp flow, whose phase speed is supersonic
 relative to the outer gas. Check with the r_max sensitivity; a radiation (PML / complex-mapping) condition would fix it.
+
+**Tanh fits (local, 2026-11-10, `MODE='profiles'`).** U: R^2 0.989-0.999 up to x = 7.0 mm. rho: 0.90-0.98, p:
+0.84-0.96 (Tran: > 0.97 for all). Two layers cannot follow both the jet boundary and the barrel shock, so the rho
+and p fits put their inner layer on the barrel shock (x = 3 mm: R = 2.3 and 2.1 mm) while U's is at the jet
+boundary (3.04 mm, half-thickness 0.064 mm). Beyond x = 7.1 mm (Mach disk / triple point) the fits break down
+(R^2 for rho down to 0.71, r1 jumping); do not use tanh results there.
+At x = 3 mm, St_D 0.5 the KH candidates are close to the smoothed-profile values (m = 0: 4.833 - 1.341i, m = 1:
+4.253 - 1.987i) but are not converged: they sit in a string of nearby eigenvalues and fail the isolation test.
 
 **First look, x = 3.0 mm, St_D 0.5 (local test, 2026-11-10):** one KH_jet mode per m, m = 0: alpha D = 4.707 - 1.291i,
 m = 1: 4.484 - 2.287i (both with downstream group velocity); no upstream_jet wave at this St.
