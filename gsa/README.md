@@ -267,3 +267,24 @@ Fixes found on the way (cfd-tools 1837142):
 - Reading: the damping is the right kind but too weak against the production at the shocks. Both scale as 1/h
   (production ~ jump / shock thickness, thickness ~ 2h), so neither refinement nor alpha_rho of this size wins.
   Next candidate: wider shock smoothing (so the base-flow shocks span many cells), with alpha_rho kept.
+
+## Wider shock smoothing (user, 2026-11-10)
+
+- `baseflow/smoothing_check.m` (no solve): variant B already covers every hotspot (blend weight 1), but leaves the
+  shocks sharp: max drho/rho per cell 0.16-0.28 at h 0.05. Threshold 0.05 with filter 0.2 / blend 0.25 mm (W2):
+  0.07-0.14; filter 0.3 / blend 0.35 mm (W3): 0.04-0.09. The sharpest points left (0.3/cell) are in the jet shear
+  layer at x 5.6-6.3, r 3.3 mm (a density jump, not a shock); threshold 0.02 would smooth it too, so it was not used.
+  Plot: `figures/newFigs/2026-11-10_srp_GSA_p0j6.6_smoothing-check_h0p05.png`.
+- **GSA, h 0.05, m 0, shift 2+0.1i, alpha_rho 3e-5** (`smW2_h0p05`, `smW3_h0p05`; 59 GB, 19 min each):
+  - W2: 1.997+1.281i, 1.080+0.940i, 2.344+0.386i, 1.120+0.318i, 1.848+0.235i, then decaying.
+  - W3: 3.048+1.138i, 2.354+0.460i, 2.242+0.459i, 1.667+0.422i, 0.906+0.264i, 3.315+0.167i, then decaying.
+  - The off-axis shock modes (triple point, off-axis bow shock, Mach disk flank) are gone, and grid_frac of modes
+    2-8 falls to 0.75-0.82 with W3. The eigenvalues still change with the filter, so none is physical yet.
+  - What is left (W3; plots `figures/newFigs/2026-11-10_srp_GSA_p0j6.6_smW3-h0p05-m0_{modes,where,spectrum}.png`):
+    - The leading mode (grid_frac 0.99, mostly u, v) sits at the bow shock near the axis, (13.5, 1) mm, with
+      grid-scale lobes filling the supersonic freestream between the bow shock and the inflow sponge. Physically
+      nothing can travel upstream there; central differences let 2h waves do it (negative group velocity), so the
+      bow shock and the inflow boundary trap them.
+    - Modes 2-5, 7, 8 peak on the axis at the barrel-shock crossing (4.73, 0.03), where the base flow is already
+      smooth (0.04/cell): likely the axis treatment (1/r terms at r = h/2) rather than sharpness.
+    - With W2, three modes peak on the axis inside the nozzle at (1.38, 0.03), which is unsmoothed (x <= 3 mm).
