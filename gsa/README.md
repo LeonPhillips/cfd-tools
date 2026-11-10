@@ -200,3 +200,26 @@ Fixes found on the way (cfd-tools 1837142):
   eigenvalues barely move (1.3936+1.1941i -> 1.3941+1.1948i), and their sponge fraction drops to 0.5-0.8 as the modes
   spread. So they are a boundary-closure (corner) artefact, not something the sponge controls.
 - No physical candidate yet in this window (none with low sponge and grid fractions).
+
+## Nozzle interior + outflow at x = -27 mm (user, 2026-11-10)
+
+- **Base flow:** `baseflow/su2L_*` (x -30..23 mm, 681,738 nodes). The export box now comes from the `GSA_BOX` env var.
+- **Mask:** the bore is opened from the plenum inlet (x = -8.124 mm, r 2.879) through the converging-diverging nozzle
+  to the exit. The inner wall is staircased from the mesh wall contour (min r of the wall segments per column), and
+  fluid runs shorter than 3 points are closed.
+- **Boundaries and sponge:**
+  - New inflow set `ni` at the inlet face: Dirichlet on all variables (the method's inlet; **assumption, to be
+    confirmed**). SU2 uses total conditions there.
+  - Outflow at x = -27 mm with a long, gentle sponge (amp 1.5, width 12 mm, transition 4 mm).
+- **Sizes:** h 0.1 gives 104,401 points (522k DOF); h 0.05 gives 417,542 points (2.09M DOF; MUMPS 31 / 45 GB for
+  m 0 / 1; peak RSS 65 GB; 15-16 min per m).
+- **Check plots:** `figures/newFigs/2026-11-10_srp_GSA_p0j6.6_case-nozzle-h0p05_*.png`. Nozzle Mach goes from ~0.3 in
+  the plenum to sonic at the throat and supersonic at the exit, as in the CFD.
+- **GSA (shift 2+0.1i, `noz_h0p1`, `noz_h0p05`):** the leading modes are still spurious.
+  - They moved with the corner: max |p'| at (-27, 9.1) mm, the first rows above the body side wall at the outflow.
+    93-100 % of their energy is in the x-min sponge, little of it on the wall or outflow rows themselves.
+  - Nothing comes from the nozzle or its inlet (energy at `ni` ~0).
+  - Test with a Dirichlet outflow (`outflow_bc`, h 0.1, m 0, `noz_outD_h0p1`): the leading eigenvalues barely change
+    (1.3275+0.7080i -> 1.3334+0.7114i, 2.2513+0.6753i -> 2.2513+0.6750i). Only one mode (1.8147+0.8035i) went away.
+  - So these are tied to the body-side wall boundary layer in the outflow region, not to the outflow BC type, the
+    sponge strength, or the distance from the jet.
