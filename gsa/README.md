@@ -243,3 +243,27 @@ Fixes found on the way (cfd-tools 1837142):
   - Earlier their maxima sat at the outflow corner. They are grid-dependent (different at h 0.1), so they are
     numerical: odd-even modes of the central differences at shocks and steep gradients. The eigenvector maximum
     follows whichever boundary closure lets it grow most.
+
+## Density damping alpha_rho (user, 2026-11-10)
+
+- Implemented in `GetLinProblemVarMu` (`opts.alpha_rho`, run option `'alpha_rho'`, default 0): the method's term,
+  applied in both x and r, on rho' only: `D_rho = -alpha_rho (hx^3 H^-1 Dxx' H Dxx + hr^3 H^-1 Drr' H Drr)`, H = W r,
+  Drr with the scalar parity for m. `operator/test_alpha_rho.m` (h 0.1): only the rho-rho block changes, H-symmetric
+  to 1e-14, negative definite, +4 % nnz. Damping rate (3e-5, h 0.1): checkerboard 0.25, 2 mm wave 6e-5.
+- **GSA, h 0.05, m 0, shift 2+0.1i** (`arho3em5_h0p05`, `arho1em4_h0p05`; 59 GB peak, 18 min each):
+
+  | slip05 (alpha 0) | alpha 3e-5 | alpha 1e-4 |
+  |---|---|---|
+  | 1.433+1.199i | 1.335+1.109i | 1.293+1.106i |
+  | 1.173+0.746i | 0.991+0.669i | 1.076+0.394i |
+  | 2.814+0.678i | 2.848+0.616i | 2.857+0.298i |
+  | 1.996+0.628i | 1.967+0.579i | 1.963+0.631i |
+  | - | 3.387+0.483i | 3.212+0.741i |
+
+  (rows paired by frequency and location, not exactly).
+- The leading modes survive with grid_frac 0.94-0.99. `locate_modes` (now with energy by variable) shows they are
+  **density-dominated** (rho 45-92 % of the energy, almost all of it grid-scale), at the same places (triple point,
+  axis crossing, Mach disk; with 1e-4 the leading one moves to the bow shock on the axis, (13.8, 0.3) mm).
+- Reading: the damping is the right kind but too weak against the production at the shocks. Both scale as 1/h
+  (production ~ jump / shock thickness, thickness ~ 2h), so neither refinement nor alpha_rho of this size wins.
+  Next candidate: wider shock smoothing (so the base-flow shocks span many cells), with alpha_rho kept.
