@@ -15,7 +15,7 @@ f = figure('Position', [0 0 1500 650]);
 subplot(1,2,1); hold on;
 Xu = mesh.X(mesh.usedInd)/mm; Yu = mesh.Y(mesh.usedInd)/mm;
 plot(X(solid), Y(solid), 's', 'Color', [.75 .75 .75], 'MarkerSize', 2, 'MarkerFaceColor', [.75 .75 .75]);
-c = struct('ji', 'r', 'ni', 'r', 'wi', 'k', 'li', 'b', 'ri', 'm', 'ti', 'g');
+c = struct('ji', 'r', 'ni', 'r', 'wi', 'k', 'si', 'c', 'li', 'b', 'ri', 'm', 'ti', 'g');
 for b = fieldnames(c)'
     if ~isfield(mesh.idx, b{1}), continue; end
     k = mesh.idx.(b{1}); plot(Xu(k), Yu(k), '.', 'Color', c.(b{1}), 'MarkerSize', 8, 'DisplayName', b{1});
@@ -63,6 +63,19 @@ for k = 1:numel(lines)
     title(sprintf('(%.2f, %.2f) -> (%.2f, %.2f) mm', L)); if k == 1, legend('Location', 'best'); end
 end
 exportgraphics(f, fullfile(outdir, [tag '_mach_lines.png']), 'Resolution', 110); close(f);
+
+%% 4. body-side wall: Mach vs r at a few x (CFD nodes vs grid, smoothed and with the boundary layer removed)
+f = figure('Position', [0 0 1200 400]);
+xs = [-3 -10 -20];
+for k = 1:numel(xs)
+    rl = linspace(p.r_body_mm, p.r_body_mm + 3, 600)'; xl = xs(k) + 0*rl;
+    subplot(1, numel(xs), k); hold on; grid on;
+    plot(F(xl, rl), rl, 'k-', 'DisplayName', 'CFD (SU2 nodes)');
+    plot(interp2(X, Y, Ms, xl, max(rl, p.r_body_mm + 0.5*p.h_mm)), rl, 'r-', 'DisplayName', 'grid (GSA base flow)');
+    xlabel('Mach'); ylabel('r (mm)'); title(sprintf('body side, x = %g mm', xs(k)));
+    if k == 1, legend('Location', 'best'); end
+end
+exportgraphics(f, fullfile(outdir, [tag '_bodyside.png']), 'Resolution', 110); close(f);
 fprintf('check plots written to %s\n', outdir);
 end
 

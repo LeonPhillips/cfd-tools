@@ -37,6 +37,11 @@ for m = m_list
     [L0, dD1] = BC_DirichletRowOnly(L0, idx, {'r', mesh.inflow_set}, {'rho','u','v','w','T'}, 1e8);
     [L0, dD2] = BC_DirichletRowOnly(L0, idx, {'w'}, {'u','v','w'}, 1e8);
     [L0, dN1] = BC_NeumannRows(L0, mesh, idx, {'w'}, {'T'}, 1e4);
+    if isfield(idx, 'si')                    % body-side slip wall: no normal (radial) velocity, rest zero gradient
+        [L0, dS1] = BC_DirichletRowOnly(L0, idx, {'s'}, {'v'}, 1e8);
+        [L0, dS2] = BC_NeumannRows(L0, mesh, idx, {'s'}, {'rho','u','w','T'}, 1e4);
+        dN1 = [dN1; dS1; dS2];
+    end
     if strcmpi(o.outflow_bc, 'dirichlet')
         [L0, dN2] = BC_NeumannRows(L0, mesh, idx, {'t'}, {'rho','u','v','w','T'}, 1e4);
         [L0, dD3] = BC_DirichletRowOnly(L0, idx, {'l'}, {'rho','u','v','w','T'}, 1e8);

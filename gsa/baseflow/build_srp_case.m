@@ -67,6 +67,18 @@ fprintf('mask: %d fluid points (%d masked); %s %d, wi %d, li %d, ri %d, ti %d\n'
 % wall normals for Neumann conditions (axis-aligned, pointing into the fluid, from the 4 neighbours)
 mesh.wall_normal = wall_normals(solid, mesh.usedInd(idx.wi));
 
+% body-side slip wall (user, 2026-11-10): the cylinder r = r_body behind the face (normal +r, x < x_face)
+use_slip = isfield(p, 'bodyside_slip') && p.bodyside_slip;
+if use_slip
+    wi = mesh.idx.wi; n = mesh.wall_normal;
+    s = n(:,1) == 0 & n(:,2) == 1 & Xu(wi) < p.x_face_mm*mm - tol & Yu(wi) > p.r_body_mm*mm - h;
+    mesh.idx.si = wi(s);
+    mesh.idx.wi = wi(~s);
+    mesh.slip_normal = n(s, :);
+    mesh.wall_normal = n(~s, :);
+    fprintf('body-side slip wall: %d points (no-slip walls left: %d)\n', numel(mesh.idx.si), numel(mesh.idx.wi));
+end
+
 %% --- base flow: scattered SU2 nodes -> grid (natural neighbour, as the method)
 S = read_bin(p.baseflow_prefix);
 ref = p.ref;
@@ -91,6 +103,22 @@ for f = fieldnames(fields)'
     raw.(f{1}) = g;
 end
 fprintf('interpolated %d fields at %.0f s\n', numel(fieldnames(fields)), toc(t0));
+
+% remove the body-side boundary layer from the base flow (with the slip wall): in each column behind the face,
+% every point within bodyside_bl_mm of the cylinder takes the values at that distance
+if use_slip
+    rb = p.r_body_mm*mm; dbl = p.bodyside_bl_mm*mm;
+    cols = find(X(1,:) < p.x_face_mm*mm - tol);
+    rows = find(Y(:,1) > rb & Y(:,1) < rb + dbl);
+    rref = find(Y(:,1) >= rb + dbl, 1);
+    for f = fieldnames(raw)'
+        a = raw.(f{1});
+        a(rows, cols) = repmat(a(rref, cols), numel(rows), 1);
+        raw.(f{1}) = a;
+    end
+    fprintf('body-side boundary layer replaced: %d rows x %d columns (r < %.2f mm)\n', numel(rows), ...
+            numel(cols), (rb + dbl)/mm);
+end
 
 %% --- local shock smoothing (method's smooth_shock, with a masked Gaussian and sigmas in mm)
 sm = p.smooth;

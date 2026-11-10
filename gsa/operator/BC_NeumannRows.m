@@ -25,6 +25,8 @@ for b = borders
         case 't', n = repmat([ 0 -1], numel(pts), 1);   % r max
         case 'w',       n = mesh.wall_normal;
             assert(size(n,1) == numel(pts), 'mesh.wall_normal must match idx.wi');
+        case 's',       n = mesh.slip_normal;
+            assert(size(n,1) == numel(pts), 'mesh.slip_normal must match idx.si');
         otherwise, error('BC_NeumannRows:border', 'unknown border %s', b{1});
     end
     Dn = spdiags(n(:,1), 0, numel(pts), numel(pts)) * mesh.Dx(pts, :) + ...

@@ -25,6 +25,11 @@ p.r_plenum_mm  = 2.879;   % plenum radius
 % variables (method's inlet) - to be confirmed.
 p.nozzle_interior = true;
 
+% body-side slip wall (user, 2026-11-10): the cylinder r = 9 mm behind the face is a slip wall, and the base-flow
+% boundary layer there (within bodyside_bl_mm of the wall) is replaced by the values at that distance
+p.bodyside_slip   = true;
+p.bodyside_bl_mm  = 0.5;
+
 % domain and grid
 p.x_range_mm = [-27 20];  % outflow moved from -9 to -27 mm (user, 2026-11-10)
 p.r_max_mm   = 27;
