@@ -16,7 +16,8 @@ function R = run_gsa_srp(outdir, h_mm, m_list, shifts, varargin)
 % the jet exit (j), on u,v,w at walls (w); Neumann (1e4) on T at walls and on all variables at x min (l) and
 % r max (t). Axis: LinStab2D symmetric/antisymmetric derivatives for the given m.
 
-o = struct('nEig', 50, 'p', 300, 'tol', 1e-8, 'adjoint', true, 'nsave', 8, 'solver', 'mumps', 'case', struct());
+o = struct('nEig', 50, 'p', 300, 'tol', 1e-8, 'adjoint', true, 'nsave', 8, 'solver', 'mumps', 'case', struct(), ...
+           'outflow_bc', 'neumann');   % x-min outflow: 'neumann' (method) or 'dirichlet' (LinStab2D examples)
 for k = 1:2:numel(varargin), o.(varargin{k}) = varargin{k+1}; end
 if ~exist(outdir, 'dir'), mkdir(outdir); end
 fls_mumps_available();
@@ -36,7 +37,13 @@ for m = m_list
     [L0, dD1] = BC_DirichletRowOnly(L0, idx, {'r', mesh.inflow_set}, {'rho','u','v','w','T'}, 1e8);
     [L0, dD2] = BC_DirichletRowOnly(L0, idx, {'w'}, {'u','v','w'}, 1e8);
     [L0, dN1] = BC_NeumannRows(L0, mesh, idx, {'w'}, {'T'}, 1e4);
-    [L0, dN2] = BC_NeumannRows(L0, mesh, idx, {'l','t'}, {'rho','u','v','w','T'}, 1e4);
+    if strcmpi(o.outflow_bc, 'dirichlet')
+        [L0, dN2] = BC_NeumannRows(L0, mesh, idx, {'t'}, {'rho','u','v','w','T'}, 1e4);
+        [L0, dD3] = BC_DirichletRowOnly(L0, idx, {'l'}, {'rho','u','v','w','T'}, 1e8);
+        dN2 = [dN2; dD3];
+    else
+        [L0, dN2] = BC_NeumannRows(L0, mesh, idx, {'l','t'}, {'rho','u','v','w','T'}, 1e4);
+    end
     L0 = L0 / -1i;                           % eigenvalues as omega: q ~ exp(-1i omega t)
     [W, invW] = GetCompEnergyNorm(mesh, BF, 'axy');
     bcdofs = unique([dD1; dD2; dN1; dN2]);
