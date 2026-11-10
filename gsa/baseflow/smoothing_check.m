@@ -30,7 +30,12 @@ for k = 1:nv
         fprintf('  %-20s (%5.1f,%4.1f): blend weight %.2f, max drho/rho per cell %.3f\n', hname{j}, ...
                 hot(j,1), hot(j,2), info.wblend(i), max(g(near)));
     end
-    gf = g(u); fprintf('  whole domain x > 3 mm: max drho/rho per cell %.3f\n', max(gf(X(u) > 3)));
+    gf = g(u); gf(X(u) <= 3) = 0; [~, order] = sort(gf, 'descend');
+    fprintf('  whole domain x > 3 mm: max drho/rho per cell %.3f; top 5 at', gf(order(1)));
+    Xu = X(u); Yu = Y(u); wb = info.wblend(u);
+    for i = order(1:5)', fprintf(' (%.2f,%.2f) %.3f w%.2f', Xu(i), Yu(i), gf(i), wb(i)); end
+    s = info.shock; fprintf('\n  sensor points with r > 3 mm and x < 7 mm (shear layer?): %d\n', ...
+                            nnz(s & X < 7 & Y > 3 & Y < 6));
     M = nan(size(mesh.X)); M(u) = hypot(BF.U(u), BF.V(u)) ./ sqrt(BF.T(u)) * pc.ref.Ma;
     subplot(nv+1, 2, 2*k-1); pcolor(X, Y, info.wblend); shading flat; axis equal; xlim([-2 16]); ylim([0 11]);
     colorbar; hold on; plot(hot(:,1), hot(:,2), 'kx', 'MarkerSize', 10, 'LineWidth', 2);
