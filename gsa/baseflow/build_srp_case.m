@@ -58,6 +58,7 @@ if use_nozzle
     solid = clean_mask(solid);              % no fluid runs shorter than 3 points (FD stencils)
 end
 mesh  = MeshMask(cmesh, double(solid));
+mesh  = fix_offaxis_symm(mesh);            % LinStab2D bug: see the function below
 if stretched
     mesh = DeformMesh(mesh, X, []);         % x map, then r map (1-D branches: exact metric terms)
     mesh = DeformMesh(mesh, [], Y);
@@ -346,4 +347,32 @@ for f = {'U','V','W','T','RHO','P','MU','MU_sutherland','MU_t','dmudT','d2mudT2'
 end
 BF.sigma_visc = p.sigma_visc;
 fprintf('--- base flow interpolated from the helper grid (%d points) to %d points\n', mA.ngp, mesh.ngp);
+end
+
+function mesh = fix_offaxis_symm(mesh)
+% Fix for LinStab2D's AddDW2mesh (eefce30) on masked axisymmetric meshes. It decides whether a radial fluid
+% segment touches the axis from the first point of the whole column (yl(1)), not of the segment. So:
+%  - in columns whose first fluid point is off the axis (e.g. behind the body, r > r_body), Dy_symm, Dy_asymm,
+%    D2y_symm and D2y_asymm are left ZERO: no radial derivatives at all in the operator there;
+%  - in columns that do start on the axis, every other segment (e.g. above the body, behind the nozzle bore)
+%    gets the axis-reflection closure at its lower end, as if that wall were the axis.
+% Off-axis segments need no parity: their rows are replaced by the plain Dy / D2y rows, and the mixed
+% derivatives are rebuilt with LinStab2D's own definitions (Dxy_symm = Dy_symm*Dx, Dyx_symm = Dx*Dy_symm).
+if ~isfield(mesh, 'Dy_symm'), return; end
+[ny, nx] = size(mesh.X);
+fl = false(ny, nx); fl(mesh.usedInd) = true;
+onaxis = false(ny, nx);
+for j = 1:nx
+    k = 1;
+    while k <= ny && fl(k, j), onaxis(k, j) = true; k = k + 1; end
+end
+off = ~onaxis(mesh.usedInd);
+P = spdiags(double(off), 0, mesh.ngp, mesh.ngp); Q = spdiags(double(~off), 0, mesh.ngp, mesh.ngp);
+mesh.Dy_symm   = Q * mesh.Dy_symm   + P * mesh.Dy;
+mesh.Dy_asymm  = Q * mesh.Dy_asymm  + P * mesh.Dy;
+mesh.D2y_symm  = Q * mesh.D2y_symm  + P * mesh.D2y;
+mesh.D2y_asymm = Q * mesh.D2y_asymm + P * mesh.D2y;
+mesh.Dxy_asymm = mesh.Dy_asymm * mesh.Dx;  mesh.Dyx_asymm = mesh.Dx * mesh.Dy_asymm;
+mesh.Dxy_symm  = mesh.Dy_symm  * mesh.Dx;  mesh.Dyx_symm  = mesh.Dx * mesh.Dy_symm;
+fprintf('off-axis radial segments: %d points get plain Dy/D2y in the (a)symmetric matrices\n', nnz(off));
 end
