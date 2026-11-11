@@ -1,0 +1,1 @@
+, 'alpha_rho', 3e-5, 'adjoint', false, 'case', struct('smooth', struct('sensor_sigma_mm',0.15,'threshold',0.05,'filter_sigma_mm',0.3,'blend_sigma_mm',0.35,'x_min_mm',3,'r_min_mm',-Inf), 'mut_sigma_mm', 0.25, 'bf_h_mm', 0.0177, 'grid', struct('h_box_mm', [], 'box_x_mm', [0.5 20], 'box_r_mm', 9.5, 'max_growth', 0.05)))

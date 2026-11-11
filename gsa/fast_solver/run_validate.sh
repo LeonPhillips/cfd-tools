@@ -9,7 +9,7 @@ NT=${NT:-${SLURM_CPUS_PER_TASK:-16}}
 CASES=${CASES:-"1:builtin,umfpack,mumps 2.5:mumps"}
 HERE=${FLS_DIR:-/scratch/qk75/LeonPhillips/PhD/cfd/su2/cfd-tools/gsa/fast_solver}
 OUT=$(pwd)
-module load matlab/r2023b
+module load ${MATLAB_MODULES:-matlab/r2023b}
 export OMP_NUM_THREADS=$NT FLS_MUMPS_DIR=$MUMPS
 echo "host $(hostname)  threads $NT  repo $(git -C "$REPO" rev-parse --short HEAD)  tools $(git -C "$HERE" rev-parse --short HEAD)"
 echo "case,exit,wall_s,maxrss_MB" > "$OUT/validate_summary.csv"

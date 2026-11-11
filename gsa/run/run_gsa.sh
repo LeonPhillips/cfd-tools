@@ -5,11 +5,12 @@
 # Writes <case dir>/<out prefix>_h<h>/{run.log,run.time,gsa_*.mat,*.png} and <case dir>/<out prefix>.done
 set -u
 C=$(readlink -f "$1"); PFX=$2; HS=$3; MS=$4; SH=$5; EXTRA=${6:-}
-G=/scratch/qk75/LeonPhillips/PhD/GSA
-T=/scratch/qk75/LeonPhillips/PhD/cfd/su2/cfd-tools/gsa
+# cluster paths (defaults: M3); on Gadi set GSA_ROOT, GSA_TOOLS, MUMPS_DIR, MATLAB_MODULES (see run_gsa_gadi.pbs)
+G=${GSA_ROOT:-/scratch/qk75/LeonPhillips/PhD/GSA}
+T=${GSA_TOOLS:-/scratch/qk75/LeonPhillips/PhD/cfd/su2/cfd-tools/gsa}
 NT=${NT:-16}
-module load matlab/r2023b >/dev/null 2>&1
-export OMP_NUM_THREADS=$NT FLS_MUMPS_DIR=$G/mumps_m3
+module load ${MATLAB_MODULES:-matlab/r2023b} >/dev/null 2>&1
+export OMP_NUM_THREADS=$NT FLS_MUMPS_DIR=${MUMPS_DIR:-$G/mumps_m3}
 rm -f "$C/$PFX.done"
 for h in $HS; do
     d="$C/${PFX}_h${h/./p}"; mkdir -p "$d"; cd "$d"

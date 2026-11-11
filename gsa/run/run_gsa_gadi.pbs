@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -P os85
+#PBS -l storage=scratch/os85
+#PBS -l wd
+#PBS -j oe
+# GSA step on Gadi (os85). Resources go on the qsub line; the task in -v:
+#   qsub -q hugemembw -l ncpus=7,mem=250GB,walltime=02:00:00 -N gsa_fine \
+#        -v TASK=gsa,CASE_DIR=<dir>,PFX=<prefix>,HS=0.05,MS=0,SH=2+0.1i,PRESET=gridW3_fine run_gsa_gadi.pbs
+#   TASK=validate : MUMPS wrapper check on LinStab2D's cavity (builtin vs mumps), in the submit folder
+#   TASK=test     : test_stretched_grid(TEST_HOUT, TEST_HBOX) in the submit folder
+#   TASK=gsa      : run_gsa.sh with the extra MATLAB arguments from presets/<PRESET>.txt
+set -u
+export GSA_ROOT=/scratch/os85/lp3540/su2/GSA
+export GSA_TOOLS=/scratch/os85/lp3540/su2/cfd-tools/gsa
+export MUMPS_DIR=$GSA_ROOT/mumps_gadi
+export MATLAB_MODULES="matlab/R2023b matlab_licence/monash"
+export NT=${PBS_NCPUS:-1}
+module load $MATLAB_MODULES
+echo "job ${PBS_JOBID:-} on $(hostname) ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)), $NT cpus, cfd-tools $(git -C $GSA_TOOLS rev-parse --short HEAD), $(date)"
+L=$GSA_ROOT/LinStab2D/aux_matlab
+case ${TASK:-} in
+  validate)
+    FLS_DIR=$GSA_TOOLS/fast_solver CASES=${CASES:-"1:builtin,mumps"} bash $GSA_TOOLS/fast_solver/run_validate.sh $GSA_ROOT/LinStab2D $MUMPS_DIR ;;
+  test)
+    /usr/bin/time -v -o test.time matlab -batch "addpath(genpath('$L')); addpath('$GSA_TOOLS/baseflow','$GSA_TOOLS/operator','$GSA_TOOLS/fast_solver','$GSA_TOOLS/run'); maxNumCompThreads($NT); test_stretched_grid(${TEST_HOUT:-0.2}, ${TEST_HBOX:-0.1})" 2>&1 | grep -v Fontconfig
+    grep -E "Elapsed|Maximum resident" test.time ;;
+  gsa)
+    EXTRA=$(cat $GSA_TOOLS/run/presets/$PRESET.txt)
+    echo "preset $PRESET: $EXTRA"
+    bash $GSA_TOOLS/run/run_gsa.sh "$CASE_DIR" "$PFX" "$HS" "$MS" "$SH" "$EXTRA"
+    d="$CASE_DIR/${PFX}_h${HS/./p}"; grep -v Fontconfig "$d/run.log" | tail -40; grep -E "Elapsed|Maximum resident" "$d/run.time" ;;
+  *) echo "unknown TASK '${TASK:-}'"; exit 1 ;;
+esac

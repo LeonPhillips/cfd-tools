@@ -4,7 +4,8 @@ function p = srp_case_defaults()
 % local shock smoothing (method), D and freestream scaling. Smoothing widths and sponge sizes below are
 % first choices, to be confirmed from the check plots.
 
-p.baseflow_prefix = '/scratch/qk75/LeonPhillips/PhD/GSA/srp_p0j6.6_meshFine_t3/baseflow/su2L';   % x -30..23 mm export
+root = getenv('GSA_ROOT'); if isempty(root), root = '/scratch/qk75/LeonPhillips/PhD/GSA'; end   % M3 default; Gadi sets GSA_ROOT
+p.baseflow_prefix = fullfile(root, 'srp_p0j6.6_meshFine_t3', 'baseflow', 'su2L');   % x -30..23 mm export
 
 % reference (freestream, from t3_cap3.cfg; see gsa/README.md)
 p.D = 0.018;
@@ -34,10 +35,18 @@ p.bodyside_bl_mm  = 0.5;
 p.x_range_mm = [-27 20];  % outflow moved from -9 to -27 mm (user, 2026-11-10)
 p.r_max_mm   = 27;
 p.h_mm       = 0.1;       % 0.1 smoke test, 0.07 sweep, 0.05 production, 0.04 grid check
+% stretched grid (user, 2026-11-12): spacing h_box_mm inside the SU2 refinement box (x 0.5-20, r 0-9.5 mm), h_mm
+% outside, with smooth transitions (cell-to-cell growth <= max_growth). h_box_mm = [] gives the uniform grid.
+% meshMedium: h_box 0.025, h 0.05; meshFine: h_box 0.0177, h 0.05.
+p.grid = struct('h_box_mm', [], 'box_x_mm', [0.5 20], 'box_r_mm', 9.5, 'max_growth', 0.05);
+% base flow built on a separate uniform grid of spacing bf_h_mm (smoothing, mu_t filter, sensor there), then
+% interpolated (linear) to the GSA grid. [] = on the GSA grid itself (uniform grids only).
+p.bf_h_mm    = [];
 
 % effective viscosity
 p.sigma_visc      = 1;    % MU = MU_Sutherland + sigma_visc * mu_t/mu_inf
 p.mut_sigma_cells = 5;    % Gaussian smoothing of mu_t (method: 5 cells); 0 = none
+p.mut_sigma_mm    = [];   % if set, the mu_t filter width in mm (overrides mut_sigma_cells; 5 cells at 0.05 = 0.25)
 
 % local shock smoothing (method's smooth_shock; sigmas in mm here).
 % Variant B, chosen by the user 2026-11-09: narrow filter, sensor off near the lip (x <= 3 mm) so the

@@ -15,18 +15,36 @@ t0 = tic;
 D = p.D;
 mm = 1e-3 / D;                              % 1 mm in units of D
 
-%% --- grid: uniform, x grid aligned with the nozzle exit plane
-h  = p.h_mm * mm;
+%% --- grid: x grid aligned with the nozzle exit plane; uniform, or stretched (fine box, see srp_case_defaults)
 xe = p.x_exit_mm * mm;
-x0 = xe - floor((xe - p.x_range_mm(1)*mm) / h + 1e-9) * h;
-x1 = xe + floor((p.x_range_mm(2)*mm - xe) / h + 1e-9) * h;
-Nx = round((x1 - x0) / h) + 1;
 Rm = p.r_max_mm * mm;
-Nr = round(Rm / h + 0.5);                   % CreateMesh with y_symmetry: dr = R/(Nr-0.5), first row at dr/2
-cmesh = CreateMesh([x0 x1], [0 Rm], Nx, Nr, 4, true, false, 0);
-X = cmesh.X; Y = cmesh.Y;
-fprintf('grid: h = %.4f mm, Nx = %d, Nr = %d, x %.3f..%.3f mm, dr = %.4f mm\n', p.h_mm, Nx, Nr, ...
-        x0/mm, x1/mm, (Y(2,1)-Y(1,1))/mm);
+stretched = isfield(p, 'grid') && isfield(p.grid, 'h_box_mm') && ~isempty(p.grid.h_box_mm) && ...
+            abs(p.grid.h_box_mm - p.h_mm) > 1e-12;
+if ~stretched
+    h  = p.h_mm * mm;
+    x0 = xe - floor((xe - p.x_range_mm(1)*mm) / h + 1e-9) * h;
+    x1 = xe + floor((p.x_range_mm(2)*mm - xe) / h + 1e-9) * h;
+    Nx = round((x1 - x0) / h) + 1;
+    Nr = round(Rm / h + 0.5);               % CreateMesh with y_symmetry: dr = R/(Nr-0.5), first row at dr/2
+    cmesh = CreateMesh([x0 x1], [0 Rm], Nx, Nr, 4, true, false, 0);
+    X = cmesh.X; Y = cmesh.Y;
+    fprintf('grid: h = %.4f mm, Nx = %d, Nr = %d, x %.3f..%.3f mm, dr = %.4f mm\n', p.h_mm, Nx, Nr, ...
+            x0/mm, x1/mm, (Y(2,1)-Y(1,1))/mm);
+else
+    % computational grid in index units (dxi = deta = 1, first row at eta = 1/2), mapped to the physical
+    % grid by 1-D maps x(xi), r(eta) (applied with LinStab2D's DeformMesh after masking)
+    g  = p.grid; hb = g.h_box_mm * mm; ho = p.h_mm * mm;
+    xs = stretched_axis(xe, p.x_range_mm*mm, hb, ho, g.box_x_mm*mm, g.max_growth, false);
+    rs = stretched_axis(hb/2, [0 Rm], hb, ho, [0 g.box_r_mm*mm], g.max_growth, true);
+    Nx = numel(xs); Nr = numel(rs);
+    cmesh = CreateMesh([0 Nx-1], [0 Nr-0.5], Nx, Nr, 4, true, false, 0);
+    X = repmat(xs(:)', Nr, 1); Y = repmat(rs(:), 1, Nx);
+    x0 = xs(1); x1 = xs(end);
+    h  = hb;                                % smallest spacing (tolerances and wall tests below)
+    fprintf(['grid (stretched): box %.4f mm in x %.2f..%.2f, r 0..%.2f mm; %.4f mm outside; growth <= %.0f%%;\n' ...
+             '  Nx = %d, Nr = %d (%d points), x %.3f..%.3f mm, r max %.3f mm\n'], g.h_box_mm, g.box_x_mm, ...
+            g.box_r_mm, p.h_mm, 100*g.max_growth, Nx, Nr, Nx*Nr, x0/mm, x1/mm, rs(end)/mm);
+end
 
 %% --- mask: body cylinder behind the face, plus the lip/nozzle block up to the exit plane (solid = true)
 tol = 1e-6 * h;
@@ -40,6 +58,11 @@ if use_nozzle
     solid = clean_mask(solid);              % no fluid runs shorter than 3 points (FD stencils)
 end
 mesh  = MeshMask(cmesh, double(solid));
+if stretched
+    mesh = DeformMesh(mesh, X, []);         % x map, then r map (1-D branches: exact metric terms)
+    mesh = DeformMesh(mesh, [], Y);
+    mesh.X = X; mesh.Y = Y;
+end
 mesh.mask = solid;
 Xu = X(mesh.usedInd); Yu = Y(mesh.usedInd);
 
@@ -79,6 +102,12 @@ if use_slip
     fprintf('body-side slip wall: %d points (no-slip walls left: %d)\n', numel(mesh.idx.si), numel(mesh.idx.wi));
 end
 
+use_aux = stretched || (isfield(p, 'bf_h_mm') && ~isempty(p.bf_h_mm) && abs(p.bf_h_mm - p.h_mm) > 1e-12);
+if use_aux
+    % base flow on a uniform helper grid (spacing bf_h_mm; default the box spacing), then interpolated here
+    [BF, raw, sensor, shock, wblend] = baseflow_from_aux(p, mesh, X, Y, solid);
+    fluid = ~solid;
+else
 %% --- base flow: scattered SU2 nodes -> grid (natural neighbour, as the method)
 S = read_bin(p.baseflow_prefix);
 ref = p.ref;
@@ -141,8 +170,10 @@ BF.W = zeros(size(X));
 BF.Re = ref.Re; BF.Ma = ref.Ma; BF.Pr = ref.Pr; BF.kappa = ref.kappa; BF.T_0 = ref.T;
 BF = sutherland_air(BF);                    % MU, dmudT, d2mudT2 (LinStab2D; also sets cv, c1, c2)
 mut = max(raw.MUt, 0);
-if p.mut_sigma_cells > 0
-    mut = masked_gauss(mut, fluid, p.mut_sigma_cells);
+sc = p.mut_sigma_cells;
+if isfield(p, 'mut_sigma_mm') && ~isempty(p.mut_sigma_mm), sc = p.mut_sigma_mm * mm / h; end
+if sc > 0
+    mut = masked_gauss(mut, fluid, sc);
 end
 mut(solid) = 0;
 BF.MU_sutherland = BF.MU;
@@ -152,6 +183,7 @@ for f = {'U','V','W','T','RHO','P','MU','MU_sutherland','MU_t','dmudT','d2mudT2'
     a = double(BF.(f{1})); a(solid) = 0; BF.(f{1}) = a;
 end
 BF.sigma_visc = p.sigma_visc;
+end
 
 %% --- sponges (method's GetSponge: tanh ramps at outflow, inflow and top, combined by max)
 sp = p.sponge;
@@ -248,4 +280,70 @@ nxv(dg) = double(S(iy(dg)-1, ix(dg)-1) | S(iy(dg)+1, ix(dg)-1)) - double(S(iy(dg
 nyv(dg) = double(S(iy(dg)-1, ix(dg)-1) | S(iy(dg)-1, ix(dg)+1)) - double(S(iy(dg)+1, ix(dg)-1) | S(iy(dg)+1, ix(dg)+1));
 nrm = hypot(nxv, nyv); nrm(nrm == 0) = 1;
 n = [nxv ./ nrm, nyv ./ nrm];
+end
+
+function xs = stretched_axis(xa, lim, hb, ho, box, gmax, from_start)
+% Grid coordinates along one axis: spacing hb inside box = [lo hi], growing smoothly (quintic smoothstep in
+% position, cell-to-cell growth <= gmax) to ho outside. One node sits at xa (exit plane, or r = hb/2 with
+% from_start = true: then nodes run from xa upwards only). Nodes stay within lim (the last one <= lim(2)).
+L = 1.875 * (ho - hb) / (gmax * hb);         % transition length (units of hb) for max d(spacing)/dx = gmax
+L = max(L, 1) * hb;
+S = @(t) (t <= 0) .* 0 + (t >= 1) .* 1 + (t > 0 & t < 1) .* (6*t.^5 - 15*t.^4 + 10*t.^3);
+sp = @(x) hb + (ho - hb) * max(S((x - box(2)) / L), S((box(1) - x) / L));
+up = xa; x = xa;
+while true
+    s = sp(x + 0.5 * sp(x));
+    if x + s > lim(2) + 1e-9 * hb, break; end
+    x = x + s; up(end+1) = x; %#ok<AGROW>
+end
+if from_start, xs = up; return; end
+dn = []; x = xa;
+while true
+    s = sp(x - 0.5 * sp(x));
+    if x - s < lim(1) - 1e-9 * hb, break; end
+    x = x - s; dn(end+1) = x; %#ok<AGROW>
+end
+xs = [fliplr(dn), up];
+end
+
+function [BF, raw, sensor, shock, wblend] = baseflow_from_aux(p, mesh, X, Y, solid)
+% Build the base flow (interpolation, body-side layer, shock smoothing, mu_t filter) on a uniform grid of
+% spacing p.bf_h_mm (default: the box spacing, or h_mm), then interpolate it (linear) to this grid's points.
+% Values inside the helper grid's solid are first filled from the nearest fluid point, so wall-adjacent
+% points never see solid values. Sutherland viscosity is recomputed here from the interpolated T.
+pa = p;
+if isfield(p, 'bf_h_mm') && ~isempty(p.bf_h_mm), pa.h_mm = p.bf_h_mm;
+elseif ~isempty(p.grid.h_box_mm),               pa.h_mm = p.grid.h_box_mm; end
+pa.grid.h_box_mm = []; pa.bf_h_mm = [];
+fprintf('--- base flow on a uniform helper grid, h = %.4f mm\n', pa.h_mm);
+[mA, BA, iA] = build_srp_case(pa);
+xa = mA.X(1, :); ra = mA.Y(:, 1);
+fa = ~mA.mask;
+[~, L] = bwdist(fa);                          % nearest fluid point of every helper-grid point
+u = mesh.usedInd; Xu = X(u); Yu = Y(u);
+lin = @(a) griddedInterpolant({ra, xa}, a(L), 'linear', 'nearest');
+BF = struct();
+for f = {'U', 'V', 'T', 'RHO', 'P', 'MU_t'}
+    G = lin(BA.(f{1}));
+    a = zeros(size(X)); a(u) = G(Yu, Xu); BF.(f{1}) = a;
+end
+raw = struct();
+for f = fieldnames(iA.raw)'
+    G = lin(iA.raw.(f{1})); a = zeros(size(X)); a(u) = G(Yu, Xu); raw.(f{1}) = a;
+end
+G = lin(iA.wblend); wblend = zeros(size(X)); wblend(u) = G(Yu, Xu);
+G = griddedInterpolant({ra, xa}, double(iA.sensor), 'linear', 'nearest'); sensor = zeros(size(X)); sensor(u) = G(Yu, Xu);
+G = griddedInterpolant({ra, xa}, double(iA.shock), 'nearest', 'nearest');  shock = false(size(X)); shock(u) = G(Yu, Xu) > 0.5;
+ref = p.ref;
+BF.W = zeros(size(X));
+BF.Re = ref.Re; BF.Ma = ref.Ma; BF.Pr = ref.Pr; BF.kappa = ref.kappa; BF.T_0 = ref.T;
+BF.T(solid) = 1;                              % keep Sutherland finite in the solid (zeroed below)
+BF = sutherland_air(BF);
+BF.MU_sutherland = BF.MU;
+BF.MU = BF.MU + p.sigma_visc * BF.MU_t;
+for f = {'U','V','W','T','RHO','P','MU','MU_sutherland','MU_t','dmudT','d2mudT2'}
+    a = double(BF.(f{1})); a(solid) = 0; BF.(f{1}) = a;
+end
+BF.sigma_visc = p.sigma_visc;
+fprintf('--- base flow interpolated from the helper grid (%d points) to %d points\n', mA.ngp, mesh.ngp);
 end

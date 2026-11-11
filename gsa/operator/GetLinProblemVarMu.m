@@ -117,16 +117,20 @@ end
 % y term only; the scaling h^3 makes the damping vanish as h^-1 at grid scale and as h^3 k^4 for resolved waves.
 if isfield(opts, 'alpha_rho') && opts.alpha_rho ~= 0
     a  = opts.alpha_rho;
-    hz = median(diff(unique(round(mesh.X(mesh.usedInd), 12))));
-    hr = median(diff(unique(round(mesh.Y(mesh.usedInd), 12))));
+    % local grid spacing (uniform grids: the constant h; stretched grids: per column / row), placed inside
+    % the H-weighted form so the term stays H-symmetric and dissipative
+    [iy, ix] = ind2sub(size(mesh.X), mesh.usedInd(:));
+    hxv = gradient(mesh.X(1, :)); hrv = gradient(mesh.Y(:, 1));
+    hzl = hxv(ix(:)); hrl = hrv(iy(:)); hz = median(hzl); hr = median(hrl);
     Hv = mesh.W(mesh.usedInd) .* mesh.Y(mesh.usedInd); Hv = Hv(:);
     assert(all(isfinite(Hv) & Hv > 0), 'GetLinProblemVarMu: invalid quadrature weights for alpha_rho');
-    H  = spdiags(Hv, 0, ngp, ngp); Hi = spdiags(1./Hv, 0, ngp, ngp);
+    Hi = spdiags(1./Hv, 0, ngp, ngp);
+    Hz = spdiags(Hv .* hzl(:).^3, 0, ngp, ngp); Hr = spdiags(Hv .* hrl(:).^3, 0, ngp, ngp);
+    H  = spdiags(Hv, 0, ngp, ngp);
     D2rs = D2R(1:ngp, 1:ngp);
-    Drho = -a * (hz^3 * (Hi * (D2z' * H * D2z)) + hr^3 * (Hi * (D2rs' * H * D2rs)));
+    Drho = -a * (Hi * (D2z' * Hz * D2z) + Hi * (D2rs' * Hr * D2rs));
     L0(1:ngp, 1:ngp) = L0(1:ngp, 1:ngp) + Drho;
     % report the damping rate of a grid-scale checkerboard and of a smooth field (Rayleigh quotients in H)
-    [iy, ix] = ind2sub(size(mesh.X), mesh.usedInd(:));
     rq = @(q) -real(q' * H * (Drho * q)) / real(q' * H * q);
     qc = (-1).^(ix + iy);
     qs = cos(2*pi*mesh.X(mesh.usedInd(:)) / 0.11);          % axial wavelength 0.11 D (~2 mm)
