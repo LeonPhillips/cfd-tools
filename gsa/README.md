@@ -288,3 +288,28 @@ Fixes found on the way (cfd-tools 1837142):
     - Modes 2-5, 7, 8 peak on the axis at the barrel-shock crossing (4.73, 0.03), where the base flow is already
       smooth (0.04/cell): likely the axis treatment (1/r terms at r = h/2) rather than sharpness.
     - With W2, three modes peak on the axis inside the nozzle at (1.38, 0.03), which is unsmoothed (x <= 3 mm).
+
+## LinStab2D bug: (a)symmetric radial derivatives behind the body (found 2026-11-12)
+
+- `AddDW2mesh` (LinStab2D eefce30) decides whether a radial fluid segment touches the axis from the first point
+  of the whole column (`yl(1)`), not of the segment. On our masked mesh:
+  - columns without the nozzle bore (x < -8.1 mm) start at r = r_body, so `Dy_symm`, `Dy_asymm`, `D2y_symm`,
+    `D2y_asymm` stay **zero** for every point above the body;
+  - bore columns (-8.1 < x < 0.5 mm) start on the axis, so the segment above the body gets an axis-reflection
+    closure at r = r_body.
+- The axisymmetric operator uses only these matrices for r derivatives (`CreateDiffMatrices_Axy`), so **every GSA
+  run before this date had no (or wrong) radial derivatives in the region x < 0.5 mm, r > 9 mm** (outflow and
+  body-side region). The outflow-corner and body-side boundary-layer modes found earlier were probably this.
+- Fix: `fix_offaxis_symm` in `build_srp_case` (commit 7c13d1c) gives off-axis segments the plain `Dy`/`D2y`
+  rows and rebuilds the mixed derivatives. `baseflow/test_stretched_grid.m` (Gadi, h 0.2/0.1): all radial
+  derivatives now match analytic ones (uniform 2e-10 to 5e-4, stretched 2e-6 to 2e-5); before, relative error ~1.
+
+## Gadi set-up and grid study (2026-11-12)
+
+- Gadi: `/scratch/os85/lp3540/su2/GSA/` with `LinStab2D` (eefce30), `mumps_gadi` (supervisor's Gadi build of
+  `zmumpsmex`), and the `su2L` base flow (SHA-256 checked). Driver `run/run_gsa_gadi.pbs` (TASK validate | test |
+  gsa, PRESET from `run/presets/`). Cavity check on Gadi: MUMPS matches builtin eigs to 1.2e-13.
+- Stretched grid (`p.grid.h_box_mm`): meshMedium / meshFine spacing in the SU2 box (x 0.5-20, r 0-9.5 mm), 0.05 mm
+  outside, <= 5 % growth, exit plane on a node, first row at h_box/2; built with `DeformMesh` (x then r map).
+- All grid-study runs share one base flow built on a uniform 0.0177 mm helper grid (W3 smoothing, mu_t filter
+  0.25 mm) and interpolated linearly to each grid; alpha_rho 3e-5 with the local spacing.
