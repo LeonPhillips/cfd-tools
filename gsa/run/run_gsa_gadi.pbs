@@ -9,6 +9,7 @@
 #   TASK=validate : MUMPS wrapper check on LinStab2D's cavity (builtin vs mumps), in the submit folder
 #   TASK=test     : test_stretched_grid(TEST_HOUT, TEST_HBOX) in the submit folder
 #   TASK=gsa      : run_gsa.sh with the extra MATLAB arguments from presets/<PRESET>.txt
+#                   (BUILD_ONLY=1: build the case only, to time it and check its size)
 set -u
 export GSA_ROOT=/scratch/os85/lp3540/su2/GSA
 export GSA_TOOLS=/scratch/os85/lp3540/su2/cfd-tools/gsa
@@ -26,6 +27,7 @@ case ${TASK:-} in
     grep -E "Elapsed|Maximum resident" test.time ;;
   gsa)
     EXTRA=$(cat $GSA_TOOLS/run/presets/$PRESET.txt)
+    [ -n "${BUILD_ONLY:-}" ] && EXTRA="$EXTRA, 'build_only', true"
     echo "preset $PRESET: $EXTRA"
     bash $GSA_TOOLS/run/run_gsa.sh "$CASE_DIR" "$PFX" "$HS" "$MS" "$SH" "$EXTRA"
     d="$CASE_DIR/${PFX}_h${HS/./p}"; grep -v Fontconfig "$d/run.log" | tail -40; grep -E "Elapsed|Maximum resident" "$d/run.time" ;;

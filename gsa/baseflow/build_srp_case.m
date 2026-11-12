@@ -107,6 +107,7 @@ use_aux = stretched || (isfield(p, 'bf_h_mm') && ~isempty(p.bf_h_mm) && abs(p.bf
 if use_aux
     % base flow on a uniform helper grid (spacing bf_h_mm; default the box spacing), then interpolated here
     [BF, raw, sensor, shock, wblend] = baseflow_from_aux(p, mesh, X, Y, solid);
+    thr = NaN;
     fluid = ~solid;
 else
 %% --- base flow: scattered SU2 nodes -> grid (natural neighbour, as the method)
@@ -153,7 +154,7 @@ end
 %% --- local shock smoothing (method's smooth_shock, with a masked Gaussian and sigmas in mm)
 sm = p.smooth;
 fluid = ~solid;
-[sensor, shock] = shock_sensor(raw.P, mesh, fluid, sm, h, mm);
+[sensor, shock, thr] = shock_sensor(raw.P, mesh, fluid, sm, h, mm);
 dist = double(bwdist(shock)) * h / mm;      % mm (bwdist returns single)
 wblend = exp(-dist.^2 / (2 * sm.blend_sigma_mm^2));
 wblend(solid) = 0;
@@ -195,7 +196,7 @@ sponge = max(left, max(right, top));
 sponge(solid) = 0;
 mesh.sponge = sponge;
 
-info = struct('p', p, 'raw', raw, 'sensor', sensor, 'shock', shock, 'wblend', wblend, ...
+info = struct('p', p, 'raw', raw, 'sensor', sensor, 'shock', shock, 'wblend', wblend, 'sensor_thr', thr, ...
               'x_range', [x0 x1], 'r_max', Rm, 'h', h, 'Nx', Nx, 'Nr', Nr, 'time_s', toc(t0));
 fprintf('case built in %.0f s: %d fluid points, %d DOF\n', toc(t0), mesh.ngp, 5*mesh.ngp);
 end
@@ -257,14 +258,15 @@ s = num ./ max(den, eps);
 s(~fluid) = a(~fluid);
 end
 
-function [sensor, shock] = shock_sensor(P, mesh, fluid, sm, h, mm)
+function [sensor, shock, thr] = shock_sensor(P, mesh, fluid, sm, h, mm)
 pv = P(mesh.usedInd);
 g  = hypot(mesh.Dx * pv, mesh.Dy * pv);
 sensor = zeros(size(P));
 sensor(mesh.usedInd) = g;
 sensor = masked_gauss(sensor, fluid, sm.sensor_sigma_mm * mm / h);
 sensor(~fluid) = 0;
-thr = sm.threshold * max(sensor(fluid));
+if isfield(sm, 'threshold_abs') && ~isempty(sm.threshold_abs), thr = sm.threshold_abs;   % set by baseflow_from_aux
+else, thr = sm.threshold * max(sensor(fluid)); end
 shock = fluid & sensor > thr & mesh.X > sm.x_min_mm*mm & mesh.Y > sm.r_min_mm*mm;
 end
 
@@ -308,33 +310,58 @@ xs = [fliplr(dn), up];
 end
 
 function [BF, raw, sensor, shock, wblend] = baseflow_from_aux(p, mesh, X, Y, solid)
-% Build the base flow (interpolation, body-side layer, shock smoothing, mu_t filter) on a uniform grid of
-% spacing p.bf_h_mm (default: the box spacing, or h_mm), then interpolate it (linear) to this grid's points.
-% Values inside the helper grid's solid are first filled from the nearest fluid point, so wall-adjacent
-% points never see solid values. Sutherland viscosity is recomputed here from the interpolated T.
-pa = p;
-if isfield(p, 'bf_h_mm') && ~isempty(p.bf_h_mm), pa.h_mm = p.bf_h_mm;
-elseif ~isempty(p.grid.h_box_mm),               pa.h_mm = p.grid.h_box_mm; end
-pa.grid.h_box_mm = []; pa.bf_h_mm = [];
-fprintf('--- base flow on a uniform helper grid, h = %.4f mm\n', pa.h_mm);
-[mA, BA, iA] = build_srp_case(pa);
-xa = mA.X(1, :); ra = mA.Y(:, 1);
-fa = ~mA.mask;
-[~, L] = bwdist(fa);                          % nearest fluid point of every helper-grid point
+% Build the base flow (interpolation, body-side layer, shock smoothing, mu_t filter) on two uniform helper
+% grids, then interpolate it (linear) to this grid's points:
+%  - fine:   spacing p.bf_h_mm (default: the box spacing) over the refined box p.grid.box_x_mm / box_r_mm plus
+%            a margin (the SU2 refinement region), and
+%  - coarse: spacing h_mm (this grid's outer spacing) over the whole domain.
+% Points inside the box take the fine values and points outside the coarse ones, blended linearly over the
+% last blend_mm inside the box edge. The shock-sensor threshold is set on the fine helper (relative to its
+% max, as before) and passed to the coarse one as an absolute value, so both flag the same shocks.
+% (One uniform fine helper over the whole domain is ~4M points at 0.0177 mm: it took > 2.5 h to build.)
+% Values inside a helper's solid are first filled from its nearest fluid point, so wall-adjacent points never
+% see solid values. Sutherland viscosity is recomputed here from the interpolated T.
+mm = 1e-3 / p.D;
+hf = p.h_mm;
+if isfield(p, 'bf_h_mm') && ~isempty(p.bf_h_mm), hf = p.bf_h_mm;
+elseif ~isempty(p.grid.h_box_mm),               hf = p.grid.h_box_mm; end
+margin_mm = 1.5; blend_mm = 0.5;
+bx = p.grid.box_x_mm; br = p.grid.box_r_mm;
+pf = p; pf.h_mm = hf; pf.grid.h_box_mm = []; pf.bf_h_mm = [];
+pf.x_range_mm = [max(p.x_range_mm(1), bx(1) - margin_mm), min(p.x_range_mm(2), bx(2) + margin_mm)];
+pf.r_max_mm   = min(p.r_max_mm, br + margin_mm);
+fprintf('--- base flow, fine helper grid: h = %.4f mm over x %.2f..%.2f, r 0..%.2f mm\n', hf, ...
+        pf.x_range_mm, pf.r_max_mm);
+[mF, BFf, iF] = build_srp_case(pf);
+pc = p; pc.grid.h_box_mm = []; pc.bf_h_mm = [];
+pc.smooth.threshold_abs = iF.sensor_thr;
+fprintf('--- base flow, coarse helper grid: h = %.4f mm over the whole domain (sensor threshold %.4g from the fine grid)\n', ...
+        p.h_mm, iF.sensor_thr);
+[mC, BFc, iC] = build_srp_case(pc);
+
+% weight of the fine helper at this grid's points (1 inside the box, 0 outside, linear over blend_mm)
 u = mesh.usedInd; Xu = X(u); Yu = Y(u);
-lin = @(a) griddedInterpolant({ra, xa}, a(L), 'linear', 'nearest');
+d = min(Xu/mm - bx(1), br - Yu/mm);
+if bx(2) < p.x_range_mm(2) - 1e-9, d = min(d, bx(2) - Xu/mm); end
+wf = min(max(d / blend_mm, 0), 1);
+kf = wf > 0;
+Fi = helper_interp(mF, Xu(kf), Yu(kf)); Ci = helper_interp(mC, Xu, Yu);
+mix = @(af, ac) mix_fields(Fi(af, 'linear'), Ci(ac, 'linear'), wf, kf, size(X), u);
 BF = struct();
 for f = {'U', 'V', 'T', 'RHO', 'P', 'MU_t'}
-    G = lin(BA.(f{1}));
-    a = zeros(size(X)); a(u) = G(Yu, Xu); BF.(f{1}) = a;
+    BF.(f{1}) = mix(BFf.(f{1}), BFc.(f{1}));
 end
 raw = struct();
-for f = fieldnames(iA.raw)'
-    G = lin(iA.raw.(f{1})); a = zeros(size(X)); a(u) = G(Yu, Xu); raw.(f{1}) = a;
+for f = fieldnames(iF.raw)'
+    raw.(f{1}) = mix(iF.raw.(f{1}), iC.raw.(f{1}));
 end
-G = lin(iA.wblend); wblend = zeros(size(X)); wblend(u) = G(Yu, Xu);
-G = griddedInterpolant({ra, xa}, double(iA.sensor), 'linear', 'nearest'); sensor = zeros(size(X)); sensor(u) = G(Yu, Xu);
-G = griddedInterpolant({ra, xa}, double(iA.shock), 'nearest', 'nearest');  shock = false(size(X)); shock(u) = G(Yu, Xu) > 0.5;
+wblend = mix(iF.wblend, iC.wblend);
+sensor = mix(double(iF.sensor), double(iC.sensor));
+sf = Fi(double(iF.shock), 'nearest'); sc = Ci(double(iC.shock), 'nearest');
+sh = sc; sh(kf) = sf .* (wf(kf) >= 0.5) + sc(kf) .* (wf(kf) < 0.5);
+shock = false(size(X)); shock(u) = sh > 0.5;
+fprintf('--- base flow interpolated from the helper grids (fine %d, coarse %d points) to %d points (%d in the box)\n', ...
+        mF.ngp, mC.ngp, mesh.ngp, nnz(kf));
 ref = p.ref;
 BF.W = zeros(size(X));
 BF.Re = ref.Re; BF.Ma = ref.Ma; BF.Pr = ref.Pr; BF.kappa = ref.kappa; BF.T_0 = ref.T;
@@ -346,7 +373,6 @@ for f = {'U','V','W','T','RHO','P','MU','MU_sutherland','MU_t','dmudT','d2mudT2'
     a = double(BF.(f{1})); a(solid) = 0; BF.(f{1}) = a;
 end
 BF.sigma_visc = p.sigma_visc;
-fprintf('--- base flow interpolated from the helper grid (%d points) to %d points\n', mA.ngp, mesh.ngp);
 end
 
 function mesh = fix_offaxis_symm(mesh)
@@ -375,4 +401,20 @@ mesh.D2y_asymm = Q * mesh.D2y_asymm + P * mesh.D2y;
 mesh.Dxy_asymm = mesh.Dy_asymm * mesh.Dx;  mesh.Dyx_asymm = mesh.Dx * mesh.Dy_asymm;
 mesh.Dxy_symm  = mesh.Dy_symm  * mesh.Dx;  mesh.Dyx_symm  = mesh.Dx * mesh.Dy_symm;
 fprintf('off-axis radial segments: %d points get plain Dy/D2y in the (a)symmetric matrices\n', nnz(off));
+end
+
+function F = helper_interp(mA, Xq, Yq)
+% F(a, method): helper-grid field a (solid filled from its nearest fluid point) at the query points
+xa = mA.X(1, :); ra = mA.Y(:, 1);
+[~, L] = bwdist(~mA.mask);
+F = @(a, method) interp_at(griddedInterpolant({ra, xa}, double(a(L)), method, 'nearest'), Yq, Xq);
+end
+
+function v = interp_at(G, Yq, Xq)
+v = G(Yq, Xq);
+end
+
+function g = mix_fields(vf, vc, wf, kf, sz, u)
+v = vc; v(kf) = wf(kf) .* vf + (1 - wf(kf)) .* vc(kf);
+g = zeros(sz); g(u) = v;
 end

@@ -19,7 +19,8 @@ function R = run_gsa_srp(outdir, h_mm, m_list, shifts, varargin)
 
 o = struct('nEig', 50, 'p', 300, 'tol', 1e-8, 'adjoint', true, 'nsave', 8, 'solver', 'mumps', 'case', struct(), ...
            'outflow_bc', 'neumann', ...   % x-min outflow: 'neumann' (method) or 'dirichlet' (LinStab2D examples)
-           'alpha_rho', 0);               % density damping (method: 3e-5 or 1e-4), see GetLinProblemVarMu
+           'alpha_rho', 0, ...            % density damping (method: 3e-5 or 1e-4), see GetLinProblemVarMu
+           'build_only', false);          % true: build the case (grid, base flow), report its size and stop
 for k = 1:2:numel(varargin), o.(varargin{k}) = varargin{k+1}; end
 if ~exist(outdir, 'dir'), mkdir(outdir); end
 fls_mumps_available();
@@ -28,6 +29,11 @@ pc = srp_case_defaults();
 pc.h_mm = h_mm;
 for f = fieldnames(o.case)', pc.(f{1}) = o.case.(f{1}); end
 [mesh, BF, info] = build_srp_case(pc);
+R = struct('m', {}, 'shift', {}, 'omega', {}, 'omega_adj', {}, 'info', {});
+if o.build_only
+    fprintf('build_only: %d fluid points, %d DOF, built in %.0f s\n', mesh.ngp, 5*mesh.ngp, info.time_s);
+    return
+end
 U = pc.ref.U; D = pc.D;
 f_Hz = @(w) real(w) * U / (2*pi*D);
 htag = strrep(sprintf('%g', h_mm), '.', 'p');
