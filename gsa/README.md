@@ -311,5 +311,22 @@ Fixes found on the way (cfd-tools 1837142):
   gsa, PRESET from `run/presets/`). Cavity check on Gadi: MUMPS matches builtin eigs to 1.2e-13.
 - Stretched grid (`p.grid.h_box_mm`): meshMedium / meshFine spacing in the SU2 box (x 0.5-20, r 0-9.5 mm), 0.05 mm
   outside, <= 5 % growth, exit plane on a node, first row at h_box/2; built with `DeformMesh` (x then r map).
-- All grid-study runs share one base flow built on a uniform 0.0177 mm helper grid (W3 smoothing, mu_t filter
-  0.25 mm) and interpolated linearly to each grid; alpha_rho 3e-5 with the local spacing.
+- All grid-study runs share one base flow built on 0.0177 mm in the box (x -1..20, r 0..11 mm) and 0.05 mm outside,
+  blended over 0.5 mm inside the box edge (W3 smoothing, mu_t filter 0.25 mm), interpolated linearly to each grid;
+  alpha_rho 3e-5 with the local spacing. (A uniform 0.0177 mm helper over the whole domain, ~4M points, took
+  > 2.5 h to build and all four first runs hit their walltime; fixed in 80dcd9e.)
+
+### Grid study results (m = 0, shift 2+0.1i, 50 modes, Gadi hugemembw 7 cores; 2026-11-12)
+
+| grid | DOF | peak mem | wall | leading modes omega (grid_frac) |
+|---|---|---|---|---|
+| uniform 0.05 | 2.09M | 69 GB | 35 min | 1.917+1.034i (0.94), 2.936+0.985i (0.98), 1.822+0.510i (0.75), 2.502+0.416i (0.80) |
+| uniform 0.035 | 4.26M | 151 GB | 79 min | 1.596+1.761i (1.00), 2.292+0.991i (1.00), 0.656+0.741i (1.00), 2.756+0.633i (1.00) |
+| meshMedium (0.025 box) | 4.02M | 140 GB | 67 min | 0.026+0.830i (1.00), 2.696+0.628i (0.99), 1.703+0.382i (1.00), 3.306+0.377i (0.99) |
+| meshFine (0.0177 box) | 6.22M | 230 GB | 131 min | 0+1.108i (0.70), 3.617+0.832i (0.77), 2.097+0.802i (0.68), 1.562+0.144i (0.67) |
+
+- No eigenvalue repeats across the grids, and every unstable mode is mostly grid-scale (grid_frac 0.67-1.00):
+  refinement does not remove the spurious modes; they move and change growth on every grid. On meshFine the
+  share at the shocks rises (shock_frac 0.39-0.54, against 0.18-0.41 on the others).
+- meshFine needed 230 GB of the 256 GB requested (MUMPS estimate 228 GB): the limit for 7 cores on hugemembw.
+- Cost: 46 SU for the four runs (plus 93 SU lost to the helper-grid walltime failures, 4 SU of tests).
