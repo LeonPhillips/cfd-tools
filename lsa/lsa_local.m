@@ -46,7 +46,8 @@
 %          'scan'        : all stations x all St x m = 0, 1 (the main result)
 %          'profiles'    : all stations, base-flow profiles and fits only (no eigenvalues): check the tanh fits
 %   Optional workspace variables: BASEFLOW_DIR, OUT_DIR (default to the M3 paths below), NWORKERS,
-%   PROFILE ('tanh', the default: Tran's fitted profiles; or 'smooth': the smoothed RANS profile).
+%   PROFILE ('tanh', the default: Tran's fitted profiles; or 'smooth': the smoothed RANS profile),
+%   SINGLE_X [mm] and SINGLE_ST (station and St_D of MODE='single'; defaults 3.0 and 1.271).
 %
 % OUTPUT: <OUT_DIR>/<MODE>/ : a .mat file with everything, PNG figures, and a text log.
 %
@@ -111,8 +112,8 @@ S.neutral_tol   = 0.02;                                 % |alpha_i| < tol*|alpha
 S.sl_window_mm  = 0.6;                                  % a KH mode's |p| peak must lie this close to its shear layer [mm]
 
 % --- 'single' mode
-S.single_x_mm = 3.0;                                    % station [mm]
-S.single_St   = 0.5;                                    % St_D
+if exist('SINGLE_X', 'var'), S.single_x_mm = SINGLE_X; else, S.single_x_mm = 3.0; end    % station [mm]
+if exist('SINGLE_ST', 'var'), S.single_St = SINGLE_ST; else, S.single_St = 1.271; end   % St_D (user, 2026-11-12)
 
 % --- 'sensitivity' mode
 S.sens_x_mm = [2.5 4.0 6.0 7.5];
@@ -208,7 +209,8 @@ switch S.mode
             print_modes(sol, S);
         end
         plot_single(out, prof(1), S);
-        save(fullfile(S.out_dir, 'lsa_single.mat'), 'out', 'prof', 'S', '-v7.3');
+        save(fullfile(S.out_dir, sprintf('x_%1.1f_St_%2.2f_lsa_single.mat', S.single_x_mm, S.single_St)), ...
+             'out', 'prof', 'S', '-v7.3');                % file name carries x and St (user, 2026-11-12)
 
     case 'sensitivity'
         % Repeat a few cases with one numerical choice changed at a time, and tabulate the KH and upstream alphas.
@@ -767,7 +769,8 @@ function plot_single(out, P, S)
         xline(P.r1*L, 'k--', 'r1', 'HandleVisibility', 'off'); xline(P.r2*L, 'k:', 'r2', 'HandleVisibility', 'off');
         xlabel('r [mm]'); ylabel('|p| (normalised)'); legend('Interpreter', 'none'); xlim([0 P.rmax*L]);
     end
-    exportgraphics(f, fullfile(S.out_dir, 'lsa_single_spectrum.png'), 'Resolution', 130); close(f);
+    exportgraphics(f, fullfile(S.out_dir, sprintf('x_%1.1f_St_%2.2f_lsa_single_spectrum.png', S.single_x_mm, ...
+        S.single_St)), 'Resolution', 130); close(f);
 end
 
 function plot_scan(R, prof, S)

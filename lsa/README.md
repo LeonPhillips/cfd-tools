@@ -52,7 +52,7 @@ matlab -batch "MODE='scan'; NWORKERS=20; lsa_local"
 | MODE | What it does | Output (in `LSA/<MODE>/`) |
 |---|---|---|
 | `selfcheck` | Thin tanh jet (M_j 1.5, cold and nu_j = 1.5) against the exact compressible vortex sheet, R/theta = 20, 40, 80 | `selfcheck.csv`, PASSED/FAILED line in the log |
-| `single` | One station (3.0 mm) and St_D 0.5, m = 0 and 1: full spectrum, labels, eigenfunctions | `lsa_single.mat`, `lsa_single_spectrum.png` |
+| `single` | One station and St_D (`SINGLE_X`, `SINGLE_ST`; default 3.0 mm, 1.271), m = 0 and 1: full spectrum, labels, eigenfunctions | `x_<x>_St_<St>_lsa_single.mat`, `x_<x>_St_<St>_lsa_single_spectrum.png` |
 | `sensitivity` | x = 2.5, 4, 6, 7.5 mm, St_D 0.25, 1, 2: N 150/250/350, r_max 2.5 mm smaller, smoothing 0.025/0.1 mm | `lsa_sensitivity.csv` |
 | `scan` | All stations x St x m | `lsa_scan.mat`, `lsa_scan_m0.png`, `lsa_scan_m1.png`, `lsa_scan_radii.png` |
 
