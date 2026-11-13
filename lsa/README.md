@@ -14,9 +14,14 @@ one output folder per mode).
 1. Base flow: `SST_p0j6.6_p0inf3.247_meshFine/2_jet_staged/t3_cap3` (the GSA base flow), read from
    `/scratch/qk75/LeonPhillips/PhD/GSA/srp_p0j6.6_meshFine_t3/baseflow/su2L_flow.{bin,json}`.
 2. Inviscid; no eddy viscosity; mean u_r (and u_theta) dropped, as in Tran 2026.
-3. Scales: D = 18 mm, a_inf = 226.865 m/s, rho_inf = 0.51693 kg/m3, p by rho_inf a_inf^2 (free-stream p = 1/gamma).
-   omega (code units) = 2 pi f D / a_inf = 2 pi St_D M_inf, with St_D = f D / U_inf, U_inf = 567.162 m/s,
-   so f [Hz] = 31,509 St_D.
+3. Scales (changed by the user on 2026-11-13): length **D_e = 4.6 mm**, the CFD nozzle exit diameter (`S.D_ref`), so
+   alpha, r and x are in units of D_e; a_inf = 226.865 m/s, rho_inf = 0.51693 kg/m3, p by rho_inf a_inf^2 (free-stream
+   p = 1/gamma). **St keeps the body diameter:** St_D = f D_body / U_inf, D_body = 18 mm (`S.D_body`),
+   U_inf = 567.162 m/s, so f [Hz] = 31,509 St_D and omega (code units) = 2 pi f D_e / a_inf = 2 pi St_D (D_e/D_body) M_inf.
+   The eigenvalue window keeps its physical size: |alpha_r| < 5 omega + 5.11 and |alpha_i| < 12.8 (were 20 and 50 per
+   18 mm). Results before 2026-11-13 were per 18 mm: multiply their alpha by 4.6/18 = 0.2556 to compare.
+   Note: the exported wall gives an inner lip radius of 2.389 mm (diameter 4.78 mm), 4 % more than 4.6 mm; D_e is
+   only the reference length, so this does not change the physics.
 4. Stations x = 1.9 to 8.0 mm every 0.1 mm. Nozzle exit x_e = 1.876 mm, inner lip radius 2.389 mm (from the
    exported wall; throat r = 2.000 mm at x = 0). The axis is subsonic by x = 8.5 mm (Mach disk). Stations inside the
    nozzle are not included.
@@ -89,7 +94,7 @@ boundary (3.04 mm, half-thickness 0.064 mm). Beyond x = 7.1 mm (Mach disk / trip
 At x = 3 mm, St_D 0.5 the KH candidates are close to the smoothed-profile values (m = 0: 4.833 - 1.341i, m = 1:
 4.253 - 1.987i) but are not converged: they sit in a string of nearby eigenvalues and fail the isolation test.
 
-**First look, x = 3.0 mm, St_D 0.5 (local test, 2026-11-10):** one KH_jet mode per m, m = 0: alpha D = 4.707 - 1.291i,
+**First look, x = 3.0 mm, St_D 0.5 (local test, 2026-11-10, per 18 mm):** one KH_jet mode per m, m = 0: alpha D = 4.707 - 1.291i,
 m = 1: 4.484 - 2.287i (both with downstream group velocity); no upstream_jet wave at this St.
 
 The group velocity comes from first-order perturbation theory with the left eigenvectors

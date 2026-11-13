@@ -20,9 +20,10 @@
 %   1. Base flow: SST_p0j6.6_p0inf3.247_meshFine, stage t3_cap3 (the same as the GSA), exported by
 %      cfd-tools gsa/baseflow/export_baseflow.py to su2L_flow.bin/.json.
 %   2. Inviscid, no eddy viscosity; mean u_r dropped (as Tran 2026).
-%   3. Scales: length D = 18 mm (body diameter), velocity a_inf = 226.865 m/s, density rho_inf = 0.51693 kg/m3,
-%      pressure rho_inf*a_inf^2 (so the free-stream pressure is 1/gamma). Frequencies reported as
-%      St_D = f*D/U_inf (U_inf = 567.162 m/s) and in Hz.
+%   3. Scales: length D_e = 4.6 mm (CFD nozzle exit diameter; S.D_ref, user 2026-11-13, was the 18 mm body
+%      diameter before), velocity a_inf = 226.865 m/s, density rho_inf = 0.51693 kg/m3, pressure rho_inf*a_inf^2
+%      (so the free-stream pressure is 1/gamma). So alpha, r, x are in units of D_e. Frequencies are still
+%      St_D = f*D_body/U_inf (D_body = 18 mm, U_inf = 567.162 m/s) and Hz.
 %   4. Stations from just downstream of the nozzle exit (x_e = 1.876 mm, r_e = 2.389 mm, from the exported wall)
 %      to x = 8.0 mm (the axis is subsonic by 8.5 mm: Mach disk), every 0.1 mm.
 %   5. r_max just inside the bow shock at each station, Dirichlet conditions there.
@@ -69,7 +70,8 @@ else, S.out_root = '/scratch/qk75/LeonPhillips/PhD/LSA'; end
 S.flow_prefix = 'su2L';                                 % su2L_flow.bin/.json and su2L_wall.bin/.json
 
 % --- reference scales (assumption 3), all SI
-S.D_ref   = 0.018;                                      % length scale: body diameter [m]
+S.D_ref   = 4.6e-3;                                     % length scale D_e: CFD nozzle exit diameter [m] (user, 2026-11-13)
+S.D_body  = 0.018;                                      % body diameter [m]: used ONLY for St_D = f*D_body/U_inf
 S.a_inf   = 226.865;                                    % free-stream sound speed [m/s]  (T = 128.067 K)
 S.rho_inf = 0.51693;                                    % free-stream density [kg/m3]
 S.U_inf   = 567.162;                                    % free-stream speed [m/s] (M = 2.5), used only for St_D
@@ -106,8 +108,9 @@ S.clu_amp  = [30 8];                                    % mapping: extra point d
 S.clu_wid_mm = [0.4 1.0];                               % mapping: width of each cluster [mm]
 
 % --- which eigenvalues to keep and how to label them
-S.alpha_max_fac = 5;                                    % keep |alpha_r| < fac*omega + 20 (removes the far, unresolved spectrum)
-S.alpha_i_max   = 50;                                   % keep |alpha_i| < this (1/D units)
+S.alpha_max_fac = 5;                                    % keep |alpha_r| < fac*omega + alpha_r_add (removes the far, unresolved spectrum)
+S.alpha_r_add   = 20 * S.D_ref/S.D_body;                % = 5.11 (1/D_e units); was 20 per D_body before 2026-11-13
+S.alpha_i_max   = 50 * S.D_ref/S.D_body;                % keep |alpha_i| < this: 12.8 (1/D_e units); was 50 per D_body
 S.neutral_tol   = 0.02;                                 % |alpha_i| < tol*|alpha_r| counts as (nearly) neutral
 S.sl_window_mm  = 0.6;                                  % a KH mode's |p| peak must lie this close to its shear layer [mm]
 
@@ -147,11 +150,11 @@ col  = @(name) A(:, strcmp(meta.names, name));          % helper: pick a column 
 fprintf('base flow: %d nodes from %s\n', meta.N, meta.source);
 
 %% 4. Non-dimensionalise ------------------------------------------------------------------------------------------
-% Lengths by D, velocity by a_inf, density by rho_inf, pressure by rho_inf*a_inf^2. Then the far free stream has
+% Lengths by D_e (S.D_ref), velocity by a_inf, density by rho_inf, pressure by rho_inf*a_inf^2. Then the far free stream has
 % nu = 1, p = 1/gamma, U = -M_inf (it flows in -x). The inviscid equations keep exactly the same form after this
 % scaling, so no extra factors appear in the operator.
-xn  = col('x') / S.D_ref;                               % x / D
-rn  = col('r') / S.D_ref;                               % r / D
+xn  = col('x') / S.D_ref;                               % x / D_e
+rn  = col('r') / S.D_ref;                               % r / D_e
 Un  = col('Velocity_x') / S.a_inf;                      % U / a_inf (local "Mach-like" velocity)
 nun = S.rho_inf ./ col('Density');                      % nu * rho_inf = rho_inf / rho
 pn  = col('Pressure') / (S.rho_inf * S.a_inf^2);        % p / (rho_inf a_inf^2)
@@ -193,8 +196,9 @@ if strcmp(S.mode, 'profiles')                           % this mode stops here
 end
 
 %% 6. Solve the eigenvalue problems -------------------------------------------------------------------------------
-% omega in our units: omega = 2*pi*f*D/a_inf = 2*pi*St_D*(U_inf/a_inf) = 2*pi*St_D*M_inf.
-St2omega = @(St) 2*pi*St*S.M_inf;
+% omega in our units: omega = 2*pi*f*D_e/a_inf, with St_D = f*D_body/U_inf (St keeps the body diameter), so
+% omega = 2*pi*St_D*(D_e/D_body)*(U_inf/a_inf) = 2*pi*St_D*(D_e/D_body)*M_inf.
+St2omega = @(St) 2*pi*St*(S.D_ref/S.D_body)*S.M_inf;
 
 switch S.mode
     case 'single'
@@ -284,9 +288,9 @@ diary off;
 
 function P = radial_profile(x_mm, FU, Fnu, Fp, FM, S)
 % Sample the mean flow along r at station x, find the shear layers and the bow shock, smooth and differentiate.
-    L  = S.D_ref*1e3;                                   % D in mm (converts mm <-> 1/D units)
-    xq = x_mm / L;                                      % station in units of D
-    dr = S.dr_fine_mm / L;                              % fine spacing in units of D
+    L  = S.D_ref*1e3;                                   % D_e in mm (converts mm <-> 1/D_e units)
+    xq = x_mm / L;                                      % station in units of D_e
+    dr = S.dr_fine_mm / L;                              % fine spacing in units of D_e
     r  = (0:dr:28/L)';                                  % fine line out to 28 mm (the export box ends at 30 mm)
     X  = xq*ones(size(r));                              % same x for every point on the line
     U = FU(X, r); nu = Fnu(X, r); p = Fp(X, r); M = FM(X, r);   % linear interpolation of the RANS nodes
@@ -323,8 +327,8 @@ function P = radial_profile(x_mm, FU, Fnu, Fp, FM, S)
 
     % --- Tran's analytic profiles (S.profile = 'tanh'): replace the smoothed profiles by two-tanh fits
     if strcmp(S.profile, 'tanh')
-        d0 = S.fit_delta0_mm / L;                       % starting half-thicknesses in units of D
-        dmin = S.fit_delta_min_mm / L;                  % minimum half-thickness in units of D
+        d0 = S.fit_delta0_mm / L;                       % starting half-thicknesses in units of D_e
+        dmin = S.fit_delta_min_mm / L;                  % minimum half-thickness in units of D_e
         fU = fit_tanh2(r, U(in),       r1, r2, d0, dmin);     % U(r)          (Tran eq. 3.1)
         fR = fit_tanh2(r, 1./nu(in),   r1, r2, d0, dmin);     % rho(r) = 1/nu (Tran eq. 3.2 fits 1/nu, i.e. density)
         fP = fit_tanh2(r, p(in),       r1, r2, d0, dmin);     % p(r)          (Tran eq. 3.3)
@@ -522,7 +526,7 @@ function sol = eig_solve(L, R, bc, omega, keepvec, S)
 % Solve L q = alpha R q (dense QZ). Also return left eigenvectors, used for the group velocity.
 % keepvec = -1 means "eigenvalues only" (the N_check solve: it only has to say where the eigenvalues are, and
 % skipping the eigenvectors makes it several times cheaper).
-    inwin = @(a) isfinite(a) & abs(real(a)) < S.alpha_max_fac*omega + 20 & abs(imag(a)) < S.alpha_i_max;
+    inwin = @(a) isfinite(a) & abs(real(a)) < S.alpha_max_fac*omega + S.alpha_r_add & abs(imag(a)) < S.alpha_i_max;
     if isequal(keepvec, -1)
         a = eig(L, R); sol = struct('alpha', a(inwin(a))); return;
     end
@@ -635,6 +639,7 @@ function run_selfcheck(S)
 % 2*alpha(R/theta = 80) - alpha(R/theta = 40) (an estimate of the zero-thickness limit) should sit on the root.
     gam = S.gamma; R0 = 0.5; rmax = 10;                 % domain 0..20 jet radii
     Sx = S; Sx.D_ref = 1e-3;                            % so the "mm" mapping settings below are in units of D
+    Sx.alpha_r_add = 20; Sx.alpha_i_max = 50;           % its own unit jet: the window it was validated with
     Sx.clu_amp = [60 0]; Sx.clu_wid_mm = [0.05 1];      % one tight cluster at r = R (the layer is only R/80 thick)
     cases = struct('Mj', {1.5, 1.5}, 'nuj', {1.0, 1.5});% isothermal and heated (nu ratio = T ratio)
     Stj = [0.2 0.4 0.6]; thetas = [80 40 20]; ms = [0 1];   % thinnest layer first: it gives the Newton start
@@ -732,7 +737,7 @@ function plot_profiles(prof, S)
         xlabel('r [mm]'); ylabel(ylab{v}); title(sprintf('%s: RANS (grey dotted) and used (%s)', names{v}, S.profile));
         subplot(2, 3, v + 3); hold on;
         for k = 1:numel(prof), plot(prof(k).r*L, prof(k).(['d' names{v}])); end
-        xlabel('r [mm]'); ylabel(['d' names{v} '/dr (1/D units)']);
+        xlabel('r [mm]'); ylabel(['d' names{v} '/dr (1/D_e units)']);
     end
     sgtitle(sprintf('srp\\_M2.5 LSA base-flow profiles, %d station(s), profile = %s', numel(prof), S.profile));
     exportgraphics(f, fullfile(S.out_dir, 'lsa_profiles.png'), 'Resolution', 130); close(f);
@@ -754,7 +759,7 @@ function plot_single(out, P, S)
             plot(real(s.alpha(i)), imag(s.alpha(i)), mk, 'Color', cols.(lab{1}), 'MarkerFaceColor', cols.(lab{1}), ...
                 'DisplayName', sprintf('%s (%d)', lab{1}, sum(i)));
         end
-        xlabel('\alpha_r D'); ylabel('\alpha_i D'); grid on; yline(0, 'k', 'HandleVisibility', 'off');
+        xlabel('\alpha_r D_e'); ylabel('\alpha_i D_e'); grid on; yline(0, 'k', 'HandleVisibility', 'off');
         title(sprintf('m = %d, St_D = %.2f, x = %.2f mm', s.m, S.single_St, P.x_mm));
         legend('Interpreter', 'none', 'Location', 'best');
         subplot(2, 2, im + 2); hold on;
@@ -780,13 +785,13 @@ function plot_scan(R, prof, S)
         UP = cell2mat(cellfun(@(r) r.UP(im, :), R, 'UniformOutput', false));
         f = figure('Visible', 'off', 'Position', [0 0 1500 900]);
         subplot(2, 2, 1); imagesc(S.St, x, -imag(KH)); axis xy; colorbar;
-        xlabel('St_D'); ylabel('x [mm]'); title(sprintf('m = %d: KH_{jet} growth rate -\\alpha_i D', S.m(im)));
+        xlabel('St_D'); ylabel('x [mm]'); title(sprintf('m = %d: KH_{jet} growth rate -\\alpha_i D_e', S.m(im)));
         subplot(2, 2, 2); hold on; cm = parula(nx);
         for k = 1:nx, plot(S.St, -imag(KH(k, :)), 'Color', cm(k, :)); end
-        xlabel('St_D'); ylabel('-\alpha_i D'); title('KH_{jet} growth rate (colour = x, blue upstream)'); grid on;
+        xlabel('St_D'); ylabel('-\alpha_i D_e'); title('KH_{jet} growth rate (colour = x, blue upstream)'); grid on;
         subplot(2, 2, 3); hold on;
         for k = 1:nx, plot(S.St, real(KH(k, :)), '-', 'Color', cm(k, :)); plot(S.St, real(UP(k, :)), '--', 'Color', cm(k, :)); end
-        xlabel('St_D'); ylabel('\alpha_r D'); title('\alpha_r: KH_{jet} (solid), upstream_{jet} (dashed)'); grid on;
+        xlabel('St_D'); ylabel('\alpha_r D_e'); title('\alpha_r: KH_{jet} (solid), upstream_{jet} (dashed)'); grid on;
         subplot(2, 2, 4); imagesc(S.St, x, double(~isnan(UP))); axis xy; colorbar;
         xlabel('St_D'); ylabel('x [mm]'); title('upstream_{jet} wave found (1) or not (0)');
         sgtitle(sprintf('srp\\_M2.5 local LSA, m = %d (inviscid, mean V dropped; smoothing %.3f mm, N = %d)', ...
