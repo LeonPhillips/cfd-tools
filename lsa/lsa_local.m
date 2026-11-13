@@ -84,13 +84,14 @@ S.r_exit_mm = 2.389;                                    % nozzle exit (inner lip
 
 % --- stations and frequencies (assumptions 4 and 7)
 S.x_mm  = 1.9 : 0.1 : 8.0;                              % axial stations [mm]
-S.St    = 0.05 : 0.05 : 2.0;                            % Strouhal numbers St_D = f D / U_inf
+S.St    = 0.05 : 0.05 : 2.0;                            % Strouhal numbers St_D = f D_body / U_inf
 S.m     = [0 1];                                        % azimuthal orders
 
 % --- numerics (assumption 8)
 S.N        = 250;                                       % Chebyshev polynomial order: N+1 collocation points
 S.N_check  = 300;                                       % second resolution: modes that move are spurious
 S.conv_tol = 1e-3;                                      % relative |alpha_N - alpha_Ncheck| / |alpha| to count as converged
+S.conv_floor = 1 * S.D_ref/S.D_body;                    % ... relative to max(conv_floor, |alpha|): 1 per D_body = 0.256 per D_e
 S.dr_fine_mm  = 0.005;                                  % spacing of the fine uniform line used to sample the RANS data [mm]
 S.smooth_mm   = 0.05;                                   % smoothing length l [mm] (about one RANS cell in the plume box)
 
@@ -561,7 +562,7 @@ function sol = mark_converged(sol, chk, S)
         dmin  = min(abs(chk.alpha - sol.alpha(j)));                      % distance to the N_check spectrum
         dself = min(abs(sol.alpha([1:j-1, j+1:end]) - sol.alpha(j)));    % distance to its own nearest neighbour
         if isempty(dself), dself = Inf; end
-        sol.conv(j) = ~isempty(dmin) && dmin < S.conv_tol*max(1, abs(sol.alpha(j))) && dmin < 0.1*dself;
+        sol.conv(j) = ~isempty(dmin) && dmin < S.conv_tol*max(S.conv_floor, abs(sol.alpha(j))) && dmin < 0.1*dself;
     end
 end
 
@@ -613,7 +614,7 @@ end
 
 function print_modes(sol, S)
     fprintf('\nm = %d, omega = %.3f (St_D = %.3f): %d eigenvalues kept, %d converged\n', sol.m, sol.omega, ...
-        sol.omega/(2*pi*S.M_inf), numel(sol.alpha), sum(sol.conv));
+        sol.omega/(2*pi*(S.D_ref/S.D_body)*S.M_inf), numel(sol.alpha), sum(sol.conv));
     fprintf('  of the converged: %d continuum, %d other\n', sum(sol.conv & strcmp(sol.label, 'continuum')), sum(sol.conv & strcmp(sol.label, 'other')));
     i = find(sol.conv & ~ismember(sol.label, {'other', 'continuum'}));   % print only the labelled waves
     for j = i'
@@ -639,7 +640,7 @@ function run_selfcheck(S)
 % 2*alpha(R/theta = 80) - alpha(R/theta = 40) (an estimate of the zero-thickness limit) should sit on the root.
     gam = S.gamma; R0 = 0.5; rmax = 10;                 % domain 0..20 jet radii
     Sx = S; Sx.D_ref = 1e-3;                            % so the "mm" mapping settings below are in units of D
-    Sx.alpha_r_add = 20; Sx.alpha_i_max = 50;           % its own unit jet: the window it was validated with
+    Sx.alpha_r_add = 20; Sx.alpha_i_max = 50; Sx.conv_floor = 1;   % its own unit jet: the settings it was validated with
     Sx.clu_amp = [60 0]; Sx.clu_wid_mm = [0.05 1];      % one tight cluster at r = R (the layer is only R/80 thick)
     cases = struct('Mj', {1.5, 1.5}, 'nuj', {1.0, 1.5});% isothermal and heated (nu ratio = T ratio)
     Stj = [0.2 0.4 0.6]; thetas = [80 40 20]; ms = [0 1];   % thinnest layer first: it gives the Newton start
@@ -654,7 +655,7 @@ function run_selfcheck(S)
                     P = selfcheck_profile(thetas(it), R0, Uj, cases(c).nuj, gam, rmax);
                     sol = solve_case(P, m, om, S.N, Sx, false);
                     chk = solve_case(P, m, om, S.N_check, Sx, -1);   % -1: eigenvalues only
-                    sol = mark_converged(sol, chk, S);
+                    sol = mark_converged(sol, chk, Sx);
                     % KH candidates: converged, clearly growing (not a neutral mode with alpha_i ~ -1e-13),
                     % downstream group velocity, |u| (axial velocity) peak near r = R (|p| need not peak there)
                     i = find(sol.conv & imag(sol.alpha) < -1e-3*abs(sol.alpha) & sol.cg > 0);
