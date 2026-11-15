@@ -7,7 +7,9 @@ function R = run_gsa_srp(outdir, h_mm, m_list, shifts, varargin)
 %     shifts  complex eigenvalue targets omega (omega = 2 pi f D / U_inf; Im > 0 = growth)
 %   options: 'nEig' (50), 'p' (300), 'tol' (1e-8), 'adjoint' (true), 'nsave' (8 modes saved/plotted),
 %            'solver' ('mumps'), 'case' (struct of overrides for srp_case_defaults, e.g. struct('sigma_visc',0.5)),
-%            'outflow_bc' ('neumann'), 'alpha_rho' (0; density damping on rho', x and r)
+%            'outflow_bc' ('neumann'), 'alpha_rho' (0; density damping on rho', x and r),
+%            'save_near' (false: save the nsave highest-growth modes; true: the nsave modes nearest the shift,
+%            for mapping a known mode), 'locate' (false: true runs locate_modes on each saved file)
 %
 % For each m: build the case (build_srp_case), the operator (GetLinProblemVarMu, full linearisation),
 % the boundary conditions, then for each shift solve with eigs_shift_invert (one MUMPS factorisation shared
@@ -20,7 +22,8 @@ function R = run_gsa_srp(outdir, h_mm, m_list, shifts, varargin)
 o = struct('nEig', 50, 'p', 300, 'tol', 1e-8, 'adjoint', true, 'nsave', 8, 'solver', 'mumps', 'case', struct(), ...
            'outflow_bc', 'neumann', ...   % x-min outflow: 'neumann' (method) or 'dirichlet' (LinStab2D examples)
            'alpha_rho', 0, ...            % density damping (method: 3e-5 or 1e-4), see GetLinProblemVarMu
-           'build_only', false);          % true: build the case (grid, base flow), report its size and stop
+           'build_only', false, ...       % true: build the case (grid, base flow), report its size and stop
+           'save_near', false, 'locate', false);
 for k = 1:2:numel(varargin), o.(varargin{k}) = varargin{k+1}; end
 if ~exist(outdir, 'dir'), mkdir(outdir); end
 fls_mumps_available();
@@ -91,7 +94,11 @@ for m = m_list
         disp(T(1:min(20, height(T)), :));
 
         % save
-        keep = ord(1:min(o.nsave, numel(ord)));
+        if o.save_near
+            [~, nr] = sort(abs(w - sigma)); keep = nr(1:min(o.nsave, numel(nr)));
+        else
+            keep = ord(1:min(o.nsave, numel(ord)));
+        end
         modes = V(:, keep);
         P = pressure_modes(modes, BF, mesh, pc.ref);
         S = struct('m', m, 'shift', sigma, 'omega', w, 'omega_adj', wa, 'table', T, 'solver', si, ...
@@ -102,6 +109,7 @@ for m = m_list
         tag = sprintf('gsa_h%s_m%d_s%d', htag, m, ks);
         save(fullfile(outdir, [tag '.mat']), '-struct', 'S', '-v7.3');
         plot_spectrum_modes(S, mesh, pc, fullfile(outdir, tag));
+        if o.locate, locate_modes(fullfile(outdir, [tag '.mat']), mesh, BF); end
         R(end+1) = struct('m', m, 'shift', sigma, 'omega', w, 'omega_adj', wa, 'info', si); %#ok<AGROW>
     end
     clear L0 W invW
