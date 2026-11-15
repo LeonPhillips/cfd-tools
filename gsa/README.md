@@ -330,3 +330,34 @@ Fixes found on the way (cfd-tools 1837142):
   share at the shocks rises (shock_frac 0.39-0.54, against 0.18-0.41 on the others).
 - meshFine needed 230 GB of the 256 GB requested (MUMPS estimate 228 GB): the limit for 7 cores on hugemembw.
 - Cost: 46 SU for the four runs (plus 93 SU lost to the helper-grid walltime failures, 4 SU of tests).
+
+## St sweep, u05 vs meshFine sizes (2026-11-13 to 11-16)
+
+St = f D / U_inf with D = 18 mm, U_inf = 567.16 m/s (f = St x 31.51 kHz). Shifts 2 pi St + 0.1i for St 0.545 to
+1.495 in steps of 0.025, plus 1.5 (40 shifts), 50 modes each, m = 0 and 1, on uniform 0.05 mm (u05) and meshFine
+sizes. All 160 shifts ran without failure. Output: `GSA/srp_p0j6.6_meshFine_t3/sweep_<grid>_m<m>_j<NN>_h0p05/`;
+merged with `merge_sweep` (TASK=merge, tol_match 0.02) into `sweep_merge/sweep_St0.545-1.5_*`. Plot copy:
+`figures/newFigs/2026-11-16_gsa-sweep_St0.545-1.5_u05-vs-meshFine_spectrum.png`.
+
+Cost and size per job (Gadi hugemembw): u05 m0 10 shifts 4 h, 75 GB, 35 SU; u05 m1 10 shifts 5 h, 93 GB, 45 SU;
+meshFine m0 5 shifts 8-9.5 h, 239 GB (of 256), 70 SU; meshFine m1 5 shifts 8-9.5 h, 305-316 GB (needs 360 GB, 10
+cores), 100-120 SU. Whole sweep about 1.8 kSU.
+
+Results (unique modes: u05 387, meshFine 297):
+- **No unstable mode matches between grids.** Every mode with growth > 0 is grid-scale (grid_frac 0.4-1) on at least
+  one grid and has no partner within |d omega| 0.1 on the other.
+- Matched within 0.02 (all m = 0, all damped):
+
+  | St | f (kHz) | growth u05 / fine | grid_frac u05 / fine | shock_frac | sponge_frac |
+  |---|---|---|---|---|---|
+  | 0.364 | 11.5 | -0.829 / -0.819 | 0.000 / 0.000 | 0.01 | 0.10 |
+  | 0.733 | 23.1 | -1.420 / -1.405 | 0.000 / 0.000 | 0.01 | 0.42 |
+  | 1.313 | 41.4 | -1.296 / -1.277 | 0.016 / 0.49 | 0.11-0.13 | 0.04-0.19 |
+
+  The first two are smooth on both grids and 0.733 is close to 2 x 0.364; the second sits mostly in the sponge.
+  The third is smooth on u05 only.
+- u05 m = 0 also has a set of smooth (grid_frac < 0.03), shock-touching (shock_frac ~0.1), low-sponge modes at St
+  0.56, 0.68, 0.84, 0.97, 1.03, 1.13, 1.25, 1.31, 1.41, 1.52 (growth -0.9 to -1.3); apart from 1.313 none has a
+  meshFine partner within 0.1.
+- Mode shapes are not available for the matched modes: they are rows 29-49 of their shift's 50, and only the 8
+  highest-growth modes are saved. Mapping them needs a rerun with the shift at the mode.
