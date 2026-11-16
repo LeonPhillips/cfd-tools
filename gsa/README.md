@@ -361,3 +361,16 @@ Results (unique modes: u05 387, meshFine 297):
   meshFine partner within 0.1.
 - Mode shapes are not available for the matched modes: they are rows 29-49 of their shift's 50, and only the 8
   highest-growth modes are saved. Mapping them needs a rerun with the shift at the mode.
+
+### Mapping the matched modes (2026-11-16, job 184076146, u05, 11 SU)
+
+Rerun on u05 with the shift at each matched eigenvalue (`NEIG=10, NSAVE=4, NEAR=1, LOCATE=1`; output
+`map_u05_m0_h0p05/`). **All three matched modes are pure azimuthal-velocity modes:** 100 % of their energy is in w'
+(rho', u', v', T' all 0.00), so p' = 0. At m = 0 with no swirl in the base flow, w' decouples from the other four
+variables and obeys a passive advection-diffusion equation, so these modes are smooth, damped and grid-independent
+by construction, and they cannot radiate sound. They are not tone candidates. The meshFine rerun was not run.
+
+The other modes near each shift (rho, u, v and T together, the acoustic/hydrodynamic ones) have grid_frac 0.2-0.8.
+**Conclusion: the sweep has no grid-converged mode with pressure content between St 0.35 and 1.7 on these two
+grids.** For later sweeps, w-only modes at m = 0 should be flagged (an energy-by-variable column in the run table)
+and left out of the matching.
