@@ -123,6 +123,8 @@ if exist('SINGLE_ST', 'var'), S.single_St = SINGLE_ST; else, S.single_St = 1.271
 % names as _N<N> before the lsa_single ending, so the N = 250 files keep their names (user, 2026-11-16).
 if exist('SINGLE_N', 'var') && strcmp(S.mode, 'single'), S.N = SINGLE_N; S.N_check = SINGLE_N + 50; end
 if S.N == 250, S.single_tag = ''; else, S.single_tag = sprintf('_N%d', S.N); end
+% a non-default profile is tagged too (_smooth), so it never overwrites the tanh files (2026-11-17)
+if ~strcmp(S.profile, 'tanh'), S.single_tag = [S.single_tag '_' S.profile]; end
 
 % --- 'sensitivity' mode
 S.sens_x_mm = [2.5 4.0 6.0 7.5];
