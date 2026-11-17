@@ -32,6 +32,12 @@ one output folder per mode).
      constant is fitted (the outer gas is the moving shock layer, not still air), and no layer may be thinner than
      0.05 mm half-thickness (one RANS cell; without this the fit snapped onto the lip and barrel-shock jumps).
    - `'smooth'`: Whittaker (penalised least-squares) smoother, cut-off length 0.05 mm.
+   - `'uniformp'` (user, 2026-11-17): uniform mean pressure p̄ (median RANS p from r1 + 0.3 mm to r2 − 0.3 mm, the
+     pressure the jet shear layer sees), U and the RANS temperature θ = pν (= RT/a∞²) as two-tanh fits, ν = θ/p̄.
+     A parallel flow with no mean radial velocity can only carry a uniform p̄; the RANS core pressure (expansion,
+     barrel shock) is dropped. This is the usual choice in local jet LSA (Michalke 1984, Mancinelli 2021, Maia 2024).
+   - `'cb'`: as `'uniformp'` but θ from Crocco–Busemann with one T0 (288.15 K, jet and free stream):
+     T/T∞ = 2.25 − 0.2 U². Within 7–9 % of the RANS T (median) but 30–70 % too hot just inside r1.
 7. m = 0 and 1; blind scan St_D 0.05-2 (experimental tones withheld).
 8. N = 250 Chebyshev points, clustered at the jet shear layer (r1) and the outer shear layer (r2). An eigenvalue
    counts only if the N = 300 solve reproduces it to 1e-3 (relative).
@@ -57,7 +63,7 @@ matlab -batch "MODE='scan'; NWORKERS=20; lsa_local"
 | MODE | What it does | Output (in `LSA/<MODE>/`) |
 |---|---|---|
 | `selfcheck` | Thin tanh jet (M_j 1.5, cold and nu_j = 1.5) against the exact compressible vortex sheet, R/theta = 20, 40, 80 | `selfcheck.csv`, PASSED/FAILED line in the log |
-| `single` | One station and St_D (`SINGLE_X`, `SINGLE_ST`; default 3.0 mm, 1.271; optional `SINGLE_N`, default 250, N_check = N + 50), m = 0 and 1: full spectrum, labels, eigenfunctions | `x_<x>_St_<St>[_N<N>][_<PROFILE>]_lsa_single.mat`, `..._lsa_single_spectrum.png` (`_N<N>` only when N ≠ 250; `_smooth` only when PROFILE ≠ tanh) |
+| `single` | One station and St_D (`SINGLE_X`, `SINGLE_ST`; default 3.0 mm, 1.271; optional `SINGLE_N`, default 250, N_check = N + 50), m = 0 and 1: full spectrum, labels, eigenfunctions | `x_<x>_St_<St>[_N<N>][_<PROFILE>]_lsa_single.mat`, `..._lsa_single_spectrum.png` (`_N<N>` only when N ≠ 250; `_<PROFILE>` only when PROFILE ≠ tanh) |
 | `sensitivity` | x = 2.5, 4, 6, 7.5 mm, St_D 0.25, 1, 2: N 150/250/350, r_max 2.5 mm smaller, smoothing 0.025/0.1 mm | `lsa_sensitivity.csv` |
 | `scan` | All stations x St x m | `lsa_scan.mat`, `lsa_scan_m0.png`, `lsa_scan_m1.png`, `lsa_scan_radii.png` |
 

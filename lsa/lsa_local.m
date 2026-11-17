@@ -101,7 +101,16 @@ S.smooth_mm   = 0.05;                                   % smoothing length l [mm
 %              (removes the barrel-shock jumps inside the jet, which smoothing cannot remove without also
 %              blurring the thin shear layer; the sensitivity run of 2026-11-10 showed that problem)
 %   'smooth' : the Whittaker-smoothed RANS profile itself
+%   'uniformp' (user, 2026-11-17): uniform mean pressure pbar (the only pressure a parallel flow with V = 0 can
+%              carry), U and the RANS temperature theta = p*nu (= R T / a_inf^2) as tanh fits, nu = theta/pbar.
+%              pbar = median RANS p between the layers (r1 + gap .. r2 - gap), i.e. the pressure the jet shear
+%              layer sees. Removes the expansion and barrel-shock pressure structure of the core, which a locally
+%              parallel model cannot hold consistently (library: Michalke 1984, Mancinelli 2021, Maia 2024 ...)
+%   'cb'     : as 'uniformp' but theta from Crocco-Busemann with one total temperature for jet and free stream
+%              (both 288.15 K): T/T_inf = T0/T_inf - (gamma-1)/2 U^2 (U in a_inf units), theta = (T/T_inf)/gamma
 if exist('PROFILE', 'var'), S.profile = PROFILE; else, S.profile = 'tanh'; end
+S.pbar_gap_mm = 0.3;                                    % 'uniformp'/'cb': pbar from r1 + gap to r2 - gap [mm]
+S.T0_ratio = 1 + (S.gamma - 1)/2 * S.M_inf^2;           % 'cb': T0/T_inf = 2.25 (T0 = 288.15 K, jet and free stream)
 S.fit_delta0_mm = [0.1 0.3 1.0];                        % starting half-thicknesses tried for each shear layer [mm]
 S.fit_delta_min_mm = 0.05;                              % thinnest allowed layer [mm]: one RANS cell; thinner is a
                                                         % fit snapping onto a jump, not a resolved shear layer
@@ -195,6 +204,12 @@ for k = 1:numel(xs_mm)
         xs_mm(k), prof_k.r1*S.D_ref*1e3, prof_k.r2*S.D_ref*1e3, prof_k.r_bs*S.D_ref*1e3, prof_k.rmax*S.D_ref*1e3);
     if strcmp(S.profile, 'tanh')                        % fit quality: Tran reports R^2 > 0.97 for every variable
         fprintf('            tanh fit R^2: U %.4f, rho %.4f, p %.4f\n', prof_k.fit.U.R2, prof_k.fit.rho.R2, prof_k.fit.p.R2);
+    elseif strcmp(S.profile, 'uniformp')
+        fprintf('            tanh fit R^2: U %.4f, theta %.4f; pbar = %.4f (p/p_inf %.3f)\n', prof_k.fit.U.R2, ...
+            prof_k.fit.theta.R2, prof_k.pbar, prof_k.pbar*S.gamma);
+    elseif strcmp(S.profile, 'cb')
+        fprintf('            tanh fit R^2: U %.4f; Crocco-Busemann theta; pbar = %.4f (p/p_inf %.3f)\n', ...
+            prof_k.fit.U.R2, prof_k.pbar, prof_k.pbar*S.gamma);
     end
 end
 plot_profiles(prof, S);                                 % raw vs used profiles, with r1, r2 marked
@@ -346,6 +361,31 @@ function P = radial_profile(x_mm, FU, Fnu, Fp, FM, S)
         [P.p, P.dp] = eval_tanh2(fP, r);
         P.fit = struct('U', fU, 'rho', fR, 'p', fP);
         P.r1 = fU.R(1); P.r2 = fU.R(2);                 % shear-layer radii of the U fit drive the grid mapping
+    end
+
+    % --- uniform mean pressure (S.profile = 'uniformp' or 'cb', user 2026-11-17): U as a tanh fit, a uniform pbar,
+    %     theta = R T / a_inf^2 (= p*nu) from a tanh fit of the RANS (uniformp) or from Crocco-Busemann (cb),
+    %     nu = theta/pbar. With p uniform, dp = 0 and the operator sees exactly U(r) and T(r).
+    if any(strcmp(S.profile, {'uniformp', 'cb'}))
+        d0 = S.fit_delta0_mm / L; dmin = S.fit_delta_min_mm / L;
+        fU = fit_tanh2(r, U(in), r1, r2, d0, dmin);
+        [P.U, P.dU] = eval_tanh2(fU, r);
+        P.r1 = fU.R(1); P.r2 = fU.R(2);
+        gap = S.pbar_gap_mm / L;
+        ib = r > P.r1 + gap & r < P.r2 - gap;
+        pin = p(in); pbar = median(pin(ib));            % the pressure the jet shear layer sees
+        if strcmp(S.profile, 'uniformp')
+            fT = fit_tanh2(r, p(in).*nu(in), P.r1, P.r2, d0, dmin);   % RANS theta = p*nu = R T / a_inf^2
+            [th, dth] = eval_tanh2(fT, r);
+            P.fit = struct('U', fU, 'theta', fT);
+        else
+            th  = (S.T0_ratio - (S.gamma - 1)/2*P.U.^2) / S.gamma;      % Crocco-Busemann, one T0
+            dth = -(S.gamma - 1)*P.U.*P.dU / S.gamma;
+            P.fit = struct('U', fU);
+        end
+        P.nu = th/pbar; P.dnu = dth/pbar;
+        P.p = pbar*ones(size(r)); P.dp = zeros(size(r));
+        P.pbar = pbar;
     end
 end
 
