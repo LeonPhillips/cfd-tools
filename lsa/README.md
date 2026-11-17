@@ -66,8 +66,36 @@ matlab -batch "MODE='scan'; NWORKERS=20; lsa_local"
 | `single` | One station and St_D (`SINGLE_X`, `SINGLE_ST`; default 3.0 mm, 1.271; optional `SINGLE_N`, default 250, N_check = N + 50), m = 0 and 1: full spectrum, labels, eigenfunctions | `x_<x>_St_<St>[_N<N>][_<PROFILE>]_lsa_single.mat`, `..._lsa_single_spectrum.png` (`_N<N>` only when N ≠ 250; `_<PROFILE>` only when PROFILE ≠ tanh) |
 | `sensitivity` | x = 2.5, 4, 6, 7.5 mm, St_D 0.25, 1, 2: N 150/250/350, r_max 2.5 mm smaller, smoothing 0.025/0.1 mm | `lsa_sensitivity.csv` |
 | `scan` | All stations x St x m | `lsa_scan.mat`, `lsa_scan_m0.png`, `lsa_scan_m1.png`, `lsa_scan_radii.png` |
+| `thickness` | Test T1 (KH û shape against jet-layer thickness, user 2026-11-17): analytic Tran two-tanh base flows, R/θ 5-100, families b / cross / a (below) | `T1_kh_modes.csv`, `T1_thickness.mat`, `<date>_lsa_T1_*.png` |
 
-Every mode also writes `lsa_profiles.png` (raw and smoothed profiles) and `lsa_local.log`.
+Every mode except `selfcheck` and `thickness` also writes `lsa_profiles.png` (raw and smoothed profiles); all write
+`lsa_local.log`. Optional `OUT_SUBDIR` names the output folder under `OUT_DIR` (default: the mode name).
+
+### MODE='thickness' (test T1)
+
+Builds each base flow as a `P` struct in the `radial_profile` format, from Tran two-tanh fits (the same as
+`MODE='single'` with `PROFILE='tanh'`: exact derivatives, r1/r2 from the U fit), and solves it with the single-mode
+path (`solve_case`, `mark_converged`, `label_modes`) and the single-mode defaults (N 250/300, grid, r_max, filters).
+The KH mode is the most unstable converged `KH_jet` with alpha_r > 0; eigenvectors normalised to max|p̂| = 1.
+One override: the `KH_jet` window (|û| peak within `sl_window_mm` of r1) is widened to max(0.6 mm, 4θ), because a
+thick layer's |û| is double-peaked and its larger lobe can sit a few θ from r1 (family a, R/θ 8, m = 0 was labelled
+`other` with the 0.6 mm window).
+No RANS data are read.
+
+- **b**: the stored fits of the x = 3 mm single run (`THICK_REF`, default `<OUT_DIR>/single/x_3.0_St_1.27_lsa_single.mat`).
+  Only the inner-layer gradient parameter b1 of the U fit changes, to give R/θ = 5, 8, 12, 20, 40, 100; b1 of the ρ
+  and p fits is scaled by the same factor. Amplitudes, radii, the outer layer and ω (St_D 1.271) unchanged. The
+  unmodified fit is included and must reproduce the single-run KH eigenvalues.
+- **cross**: b with U = U_j T(r; R1, b1) (outer stream at rest, U_j kept).
+- **a**: one jet layer, Edgington-Mitchell 2020 regime: M_j 1.09, T0 = T∞, U₂ = 0, flat p = 1/γ,
+  ρ_j/ρ∞ = 1 + 0.2 M_j², ρ layer as wide as U's, R = 0.5 D_e, ω = 2π · 0.67 · U_j (St_j on D_e). r2 = 3R is a dummy
+  outer radius for `make_grid` only (amplitude 0).
+- θ = ∫ f(1 − f) dr of the jet layer alone (f = T(r; R1, b1)), trapz on 200,001 points; b1 from `fzero`.
+- Per mode: α, c_r/U_j, (c_r − U₂)/(U_j − U₂), α_i/α_r, α_rθ, |û| layer/inner/outer-lobe peaks over the max, the
+  second peak (largest other local maximum separated by a dip), interior minimum < 0.5 × smaller peak, a visible
+  double peak (that, and second peak ≥ 0.25), min-|û| radius, phase jumps, r_c (U = c_r) and the peak of
+  |iαv̂ − dû/dr|. Lengths in D_e.
+- Options: `THICK_FAMS` (cell), `THICK_RTHETA`, `THICK_M`, `FIG_DIR` (figure folder; default the output folder).
 
 ## Mode labels (heuristics, not a Briggs-Bers analysis)
 

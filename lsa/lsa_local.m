@@ -46,6 +46,8 @@
 %          'sensitivity' : a few stations/St with N, r_max and smoothing varied (is the answer converged?)
 %          'scan'        : all stations x all St x m = 0, 1 (the main result)
 %          'profiles'    : all stations, base-flow profiles and fits only (no eigenvalues): check the tanh fits
+%          'thickness'   : test T1 (2026-11-17): KH u-hat against jet-layer thickness on analytic two-tanh base
+%                          flows built from the x = 3 mm single-run fits (see run_thickness and README.md)
 %   Optional workspace variables: BASEFLOW_DIR, OUT_DIR (default to the M3 paths below), NWORKERS,
 %   PROFILE ('tanh', the default: Tran's fitted profiles; or 'smooth': the smoothed RANS profile),
 %   SINGLE_X [mm] and SINGLE_ST (station and St_D of MODE='single'; defaults 3.0 and 1.271), SINGLE_N (N of
@@ -139,11 +141,25 @@ if ~strcmp(S.profile, 'tanh'), S.single_tag = [S.single_tag '_' S.profile]; end
 S.sens_x_mm = [2.5 4.0 6.0 7.5];
 S.sens_St   = [0.25 1.0 2.0];
 
+% --- 'thickness' mode (test T1 of the KH u-hat shape question, user 2026-11-17): analytic two-tanh base flows
+%     built from the x = 3 mm single-run fits, with the jet-layer thickness varied (see run_thickness below)
+if exist('THICK_REF', 'var'), S.thick_ref = THICK_REF;  % the MODE='single' tanh .mat at x = 3 mm (N = 250, no tag)
+else, S.thick_ref = fullfile(S.out_root, 'single', 'x_3.0_St_1.27_lsa_single.mat'); end
+if exist('THICK_FAMS', 'var'), S.thick_fams = THICK_FAMS; else, S.thick_fams = {'b', 'cross', 'a'}; end
+if exist('THICK_RTHETA', 'var'), S.thick_Rtheta = THICK_RTHETA; else, S.thick_Rtheta = [5 8 12 20 40 100]; end
+if exist('THICK_M', 'var'), S.thick_m = THICK_M; else, S.thick_m = [0 1]; end
+S.thick_Mj  = 1.09;                                     % family (a): Edgington-Mitchell 2020 A1 screech, cold jet
+S.thick_Stj = 0.67;                                     % family (a): St_j = f D_e / U_j
+S.thick_r2a = 1.5;                                      % family (a): a dummy outer radius 3R (only for make_grid)
+S.thick_dbl = 0.25;                                     % "visible double peak": 2nd peak >= this x max (own choice)
+if exist('FIG_DIR', 'var'), S.fig_dir = FIG_DIR; else, S.fig_dir = ''; end   % '' = the output folder
+
 % --- parallel workers (0 = serial)
 if exist('NWORKERS', 'var'), S.nworkers = NWORKERS; else, S.nworkers = 0; end
 
 % --- output folder for this mode, and a log file that records the settings
 S.out_dir = fullfile(S.out_root, S.mode);               % e.g. .../LSA/scan
+if exist('OUT_SUBDIR', 'var'), S.out_dir = fullfile(S.out_root, OUT_SUBDIR); end   % optional folder name
 if ~exist(S.out_dir, 'dir'), mkdir(S.out_dir); end      % make it if needed
 diary(fullfile(S.out_dir, 'lsa_local.log'));            % copy everything printed to a log file
 fprintf('lsa_local.m  mode=%s  %s\n', S.mode, datestr(now)); %#ok<TNOW1,DATST>
@@ -155,6 +171,11 @@ disp(S);                                                % record the settings us
 if strcmp(S.mode, 'selfcheck')
     run_selfcheck(S);                                   % all the work is in the local function at the bottom
     diary off; return;                                  % nothing else to do in this mode
+end
+% Test T1 (MODE='thickness'): analytic base flows only, so the RANS base flow is not loaded either.
+if strcmp(S.mode, 'thickness')
+    run_thickness(S);
+    diary off; return;
 end
 
 %% 3. Load the RANS base flow -------------------------------------------------------------------------------------
@@ -770,6 +791,263 @@ function a = vortex_sheet_root(a, om, m, Uj, nuj, R0)
         a = a + da;
         if abs(da) < 1e-12*max(1, abs(a)), break; end
     end
+end
+
+% ------------------------------------------------------------------------------------- thickness study (T1) -----
+function run_thickness(S)
+% Test T1 (user, 2026-11-17): how the KH u-hat eigenfunction changes with the jet-layer thickness.
+% Base flows are Tran two-tanh profiles (the same form, exact derivatives and solver path as MODE='single' with
+% PROFILE='tanh'); only the jet (inner) layer gradient parameter b1 of the U fit is changed, to give R/theta in
+% S.thick_Rtheta. Families:
+%   b     : the x = 3 mm single-run fits of U, rho = 1/nu and p (read from S.thick_ref). b1 of the rho and p fits is
+%           scaled by the same factor as U's, so their widths keep their ratio to the U width. Amplitudes, radii,
+%           the outer layer and omega (St_D 1.271) unchanged. The unmodified fit ('ref') is included.
+%   cross : as b, but U = U_j*T(r; R1, b1): the outer-stream velocity set to 0 (jet layer only), U_j kept.
+%   a     : one jet layer, Edgington-Mitchell 2020 regime: M_j 1.09, cold (T0 = T_inf), U2 = 0, p flat = 1/gamma,
+%           rho_j/rho_inf = 1 + 0.2 M_j^2 (matched pressure), rho layer the same width as U's, R = 0.5 D_e,
+%           omega = 2 pi St_j U_j (St_j = 0.67 on D_e). r2 = 3R is a dummy for the grid mapping (no outer layer).
+% theta is the momentum thickness of the inner layer alone: theta = int_0^rmax f(1-f) dr, f = T(r; R1, b1),
+% computed numerically (trapz on a 200,001-point line); f is (U - U2)/(U_j - U2) of the jet layer.
+    t0 = tic;
+    ref = load(S.thick_ref, 'prof', 'out');
+    P0 = ref.prof(1); F0 = P0.fit;                       % stored fits of the x = 3 mm single run
+    om_b = ref.out.sol{1}.omega;                         % the single run's omega (St_D 1.271 -> 5.102)
+    fprintf('T1: reference %s (x = %.2f mm), omega_b = %.4f\n', S.thick_ref, P0.x_mm, om_b);
+    rows = {}; EF = struct('fam', {}, 'Rt', {}, 'm', {}, 'r', {}, 'u', {}, 'R', {}, 'theta', {}, 'alpha', {}, 'ref', {});
+    for f = 1:numel(S.thick_fams)
+        fam = S.thick_fams{f};
+        Rts = S.thick_Rtheta; if ~strcmp(fam, 'a'), Rts = [NaN, Rts]; end   % NaN = unmodified reference fit
+        for Rt = Rts
+            [P, info] = thick_base(fam, Rt, F0, P0, om_b, S);
+            for m = S.thick_m
+                sol = solve_case(P, m, info.omega, S.N, S, true);
+                chk = solve_case(P, m, info.omega, S.N_check, S, -1);
+                % The only override of the single-mode settings: the KH_jet window (|u| peak within sl_window of
+                % r1) is widened to max(0.6 mm, 4 theta). The 0.6 mm window was sized for the thin RANS layer; in a
+                % thick layer |u| is double-peaked and its maximum lobe sits a few theta from r1 (found on family a,
+                % R/theta 8, m = 0: converged KH mode with |u| peak 0.17 D_e inside r1, labelled 'other').
+                Sl = S; Sl.sl_window_mm = max(S.sl_window_mm, 4*info.theta*S.D_ref*1e3);
+                sol = label_modes(mark_converged(sol, chk, S), P, Sl);
+                i = find(sol.conv & strcmp(sol.label, 'KH_jet') & real(sol.alpha) > 0);
+                nKH = numel(i);
+                if isempty(i)
+                    M = thick_metrics([], [], P, info, S);
+                    fprintf('%-5s R/theta %6.1f m = %d: no converged KH_jet mode (missing)\n', fam, info.Rt, m);
+                else
+                    [~, j] = min(imag(sol.alpha(i))); j = i(j);   % most unstable converged KH_jet (as pick_branches)
+                    [M, ef] = thick_metrics(sol, j, P, info, S);
+                    ef.fam = fam; ef.Rt = info.Rt; ef.m = m; ef.ref = isnan(Rt);
+                    EF(end+1) = ef; %#ok<AGROW>
+                    fprintf(['%-5s R/theta %6.1f m = %d: alpha = %7.4f %+7.4fi  c/Uj %.3f  ai/ar %.3f  ar*theta %.4f  ' ...
+                             'lobes in/out %.3f/%.3f  2nd pk %.3f  min %d dbl %d  (%d KH)\n'], fam, info.Rt, m, ...
+                        real(sol.alpha(j)), imag(sol.alpha(j)), M.c_Uj, M.ai_ar, M.ar_theta, M.inner, M.outer, ...
+                        M.pk2, M.has_min, M.dbl_peak, nKH);
+                end
+                allKH = strjoin(arrayfun(@(z) sprintf('%.4f%+.4fi', real(z), imag(z)), sol.alpha(i)', 'UniformOutput', false), ' ');
+                rows(end+1, :) = [{fam, Rt, info.Rt, m, info.omega, nKH, allKH}, struct2cell(M)']; %#ok<AGROW>
+            end
+        end
+    end
+    names = [{'family', 'Rtheta_target', 'Rtheta', 'm', 'omega', 'nKH', 'all_KH'}, fieldnames(thick_metrics([], [], P, info, S))'];
+    T = cell2table(rows, 'VariableNames', names);
+    writetable(T, fullfile(S.out_dir, 'T1_kh_modes.csv'));
+    save(fullfile(S.out_dir, 'T1_thickness.mat'), 'T', 'EF', 'S', '-v7.3');
+    % --- reproduction check: the unmodified b fit against the stored single-run KH_jet modes
+    for im = 1:numel(ref.out.sol)
+        s = ref.out.sol{im}; i = find(s.conv & strcmp(s.label, 'KH_jet') & real(s.alpha) > 0);
+        if isempty(i), continue; end
+        [~, j] = min(imag(s.alpha(i))); a0 = s.alpha(i(j));
+        k = find(strcmp(T.family, 'b') & isnan(T.Rtheta_target) & T.m == s.m);
+        if ~isempty(k)
+            fprintf('REPRODUCTION m = %d: single %.5f%+.5fi, T1 ref %.5f%+.5fi, rel. diff %.2e\n', s.m, real(a0), ...
+                imag(a0), T.ar(k), T.ai(k), abs(T.ar(k) + 1i*T.ai(k) - a0)/abs(a0));
+        end
+    end
+    if numel(EF) > 0, plot_thickness(T, EF, S); end
+    fprintf('T1 done in %.0f s\n', toc(t0));
+end
+
+function th = inner_theta(R, b, rmax)
+% Momentum thickness of one Michalke layer f = T(r; R, b): theta = int f(1-f) dr (trapz, 200,001 points).
+    rr = linspace(0, rmax, 200001)';
+    fl = tanhT(rr, R, b);
+    th = trapz(rr, fl.*(1 - fl));
+end
+
+function [P, info] = thick_base(fam, Rt, F0, P0, om_b, S)
+% Build one T1 base flow as a P struct in the format radial_profile returns (fine line r, values and exact
+% derivatives from eval_tanh2, r1/r2 from the U fit, rmax). Rt = NaN keeps the fitted thickness (family b, cross).
+    r = P0.r; rmax = P0.rmax;                            % the single run's fine line and r_max (unchanged)
+    if strcmp(fam, 'a')
+        Tj = 1/(1 + (S.gamma - 1)/2*S.thick_Mj^2);       % T_j/T_inf, cold jet (T0 = T_inf), matched pressure
+        Uj = S.thick_Mj*sqrt(Tj); rhoj = 1/Tj;           % U_j/a_inf, rho_j/rho_inf
+        R = 0.5;                                         % jet radius 0.5 D_e
+        bU = fzero(@(lb) log(R/inner_theta(R, exp(lb), rmax)) - log(Rt), log(Rt/4));
+        bU = exp(bU);
+        FU = struct('R', [R S.thick_r2a], 'b', [bU 1], 'A', [Uj 0], 'c', 0);
+        FR = struct('R', [R S.thick_r2a], 'b', [bU 1], 'A', [rhoj - 1, 0], 'c', 1);
+        FP = struct('R', [R S.thick_r2a], 'b', [bU 1], 'A', [0 0], 'c', 1/S.gamma);
+        omega = 2*pi*S.thick_Stj*Uj; U2 = 0; k = NaN;
+    else
+        FU = F0.U; FR = F0.rho; FP = F0.p; R = FU.R(1);
+        if isnan(Rt), k = 1;
+        else
+            bU = exp(fzero(@(lb) log(R/inner_theta(R, exp(lb), rmax)) - log(Rt), log(FU.b(1))));
+            k = bU/FU.b(1);                              % the factor applied to every inner-layer b1
+        end
+        FU.b(1) = k*FU.b(1); FR.b(1) = k*FR.b(1); FP.b(1) = k*FP.b(1);
+        Uj = sum(FU.A) + FU.c; U2 = FU.A(2) + FU.c;      % core value and the plateau between the layers
+        if strcmp(fam, 'cross'), FU.A = [Uj 0]; FU.c = 0; U2 = 0; end   % jet layer only, outer stream at rest
+        omega = om_b;
+    end
+    FU.delta = FU.R./(2*FU.b); FR.delta = FR.R./(2*FR.b); FP.delta = FP.R./(2*FP.b);   % half-thicknesses
+    P = struct('x_mm', P0.x_mm, 'r', r, 'r1', FU.R(1), 'r2', FU.R(2), 'r_bs', P0.r_bs, 'rmax', rmax);
+    [P.U, P.dU] = eval_tanh2(FU, r);
+    [rho, drho] = eval_tanh2(FR, r);
+    P.nu = 1./rho; P.dnu = -drho./rho.^2;
+    [P.p, P.dp] = eval_tanh2(FP, r);
+    P.fit = struct('U', FU, 'rho', FR, 'p', FP);
+    th = inner_theta(R, FU.b(1), rmax);
+    info = struct('fam', fam, 'Rt', R/th, 'theta', th, 'R', R, 'Uj', Uj, 'U2', U2, 'omega', omega, 'k', k);
+end
+
+function [M, ef] = thick_metrics(sol, j, P, info, S)
+% Shape measures of one KH mode (lengths in D_e). Eigenvector normalised as single: max|p| = 1 (phase 0 there).
+    M = struct('ar', NaN, 'ai', NaN, 'c_Uj', NaN, 'c_rel', NaN, 'ai_ar', NaN, 'theta', info.theta, 'R', info.R, ...
+               'Uj', info.Uj, 'U2', info.U2, 'k_b', info.k, 'ar_theta', NaN, 'layer', NaN, 'inner', NaN, 'outer', NaN, ...
+               'pk2', NaN, 'r_pk1', NaN, 'r_pk2', NaN, 'has_min', false, 'dbl_peak', false, 'r_umin', NaN, ...
+               'dphi_pk', NaN, 'dphi_layer', NaN, 'r_c', NaN, 'r_vort', NaN, 'n_ext', NaN, 'noisy', false);
+    ef = struct();
+    if isempty(sol), return; end
+    a = sol.alpha(j); r = sol.r; n = numel(r); q = sol.V(:, j);
+    p = q(4*n+1:5*n); [~, ip] = max(abs(p)); q = q/p(ip);
+    u = q(n+1:2*n); v = q(2*n+1:3*n);
+    G = make_grid(P, sol.N, S); vort = 1i*a*v - G.Dr*u;  % omega_theta ~ i alpha v - du/dr
+    R = info.R; th = info.theta; r2 = P.r2; cr = sol.omega/real(a);
+    M.ar = real(a); M.ai = imag(a); M.ai_ar = imag(a)/real(a); M.ar_theta = real(a)*th;
+    M.c_Uj = cr/info.Uj; M.c_rel = (cr - info.U2)/(info.Uj - info.U2);
+    umax = max(abs(u));
+    % fine uniform line from the axis to r2 - 3 theta (inside the outer layer)
+    rf = linspace(0, r2 - 3*th, 8001)';
+    uf = interp1(r, real(u), rf, 'pchip') + 1i*interp1(r, imag(u), rf, 'pchip'); ua = abs(uf)/umax;
+    M.layer = max(ua(abs(rf - R) <= 3*th));
+    if any(rf < R - 3*th), M.inner = max(ua(rf < R - 3*th)); else, M.inner = 0; end
+    M.outer = max(ua(rf > R + 3*th));
+    % local maxima (the axis counts if |u| falls away from it); global one, and the largest separated other one
+    pk = find([ua(1) >= ua(2); ua(2:end-1) > ua(1:end-2) & ua(2:end-1) >= ua(3:end); false]);
+    [~, ig] = max(ua); best = 0; i2 = NaN; imn = NaN;
+    for t = pk'
+        if t == ig || abs(rf(t) - rf(ig)) < 2*th, continue; end   % a lobe, not a wiggle on the main peak
+        seg = min(t, ig):max(t, ig); [mn, im] = min(ua(seg));
+        if mn < 0.9*ua(t) && ua(t) > best, best = ua(t); i2 = t; imn = seg(im); end
+    end
+    M.r_pk1 = rf(ig);
+    if ~isnan(i2)
+        M.pk2 = ua(i2)/ua(ig); M.r_pk2 = rf(i2); M.r_umin = rf(imn);
+        M.has_min = ua(imn) < 0.5*min(ua(ig), ua(i2));
+        M.dbl_peak = M.has_min && M.pk2 >= S.thick_dbl;
+        M.dphi_pk = angle(uf(i2)/uf(ig))/pi;
+    end
+    ul = interp1(rf, uf, [max(R - 3*th, 0), R + 3*th]); M.dphi_layer = angle(ul(2)/ul(1))/pi;
+    % critical radius U(r_c) = c_r nearest the jet layer, inside (R + r2)/2
+    rw = rf(rf <= (R + r2)/2); Uw = interp1(P.r, P.U, rw) - cr;
+    sc = find(Uw(1:end-1).*Uw(2:end) <= 0);
+    if ~isempty(sc)
+        rc = rw(sc) - Uw(sc).*(rw(sc+1) - rw(sc))./(Uw(sc+1) - Uw(sc));
+        [~, ic] = min(abs(rc - R)); M.r_c = rc(ic);
+    end
+    in = r <= (R + r2)/2; ri = r(in); [~, iv] = max(abs(vort(in))); M.r_vort = ri(iv);
+    % roughness: extrema of |u| on the collocation points within 10 theta of R where |u| > 5 % of max. A clean KH
+    % eigenfunction has a few (two lobes, a null); grid-scale oscillation (an under-resolved critical layer of a
+    % nearly neutral mode) gives many. Flagged as noisy above 8; its shape measures are not trusted.
+    ua_c = abs(u(abs(r - R) <= 10*th))/umax; ds = sign(diff(ua_c)); ds = ds(ds ~= 0);
+    ext = find(diff(ds) ~= 0) + 1; ext = ext(ua_c(ext) > 0.05);
+    M.n_ext = numel(ext); M.noisy = M.n_ext > 8;
+    ef = struct('fam', '', 'Rt', NaN, 'm', NaN, 'r', r, 'u', u/umax, 'R', R, 'theta', th, 'alpha', a, 'ref', false);
+end
+
+function plot_thickness(T, EF, S)
+% Figure 1 (two files): |u|/max and phase/pi against (r - R)/theta and against r/D_e, one row per family, columns
+% m = 0 |u|, m = 0 phase, m = 1 |u|, m = 1 phase; curves coloured by R/theta (log), the unmodified fit black dashed.
+% Figure 2: lobe ratios and c/U_j against alpha_r theta (log x). Figure 3 (T4): u-min radius, r_c and vorticity peak.
+    if isempty(S.fig_dir), fd = S.out_dir; else, fd = S.fig_dir; end
+    pre = [datestr(now, 'yyyy-mm-dd') '_lsa_T1_']; %#ok<TNOW1,DATST>
+    fams = S.thick_fams; ms = S.thick_m; cm = parula(256); lr = log([4 120]);
+    ccol = @(Rt) cm(max(1, min(256, round(1 + 255*(log(Rt) - lr(1))/diff(lr)))), :);
+    ftitle = struct('b', '(b) x = 3 mm fits', 'cross', 'cross: (b) with U_2 = 0', 'a', '(a) EM2020: M_j 1.09, cold, U_2 = 0');
+    for xs = 1:2
+        f = figure('Visible', 'off', 'Position', [0 0 1800 300*numel(fams) + 100]);
+        tl = tiledlayout(numel(fams), 2*numel(ms), 'TileSpacing', 'compact');
+        for fi = 1:numel(fams)
+            for mi = 1:numel(ms)
+                ax1 = nexttile(tl, (fi - 1)*2*numel(ms) + 2*mi - 1); hold(ax1, 'on');
+                ax2 = nexttile(tl, (fi - 1)*2*numel(ms) + 2*mi);     hold(ax2, 'on');
+                e = EF(strcmp({EF.fam}, fams{fi}) & [EF.m] == ms(mi));
+                for k = 1:numel(e)
+                    if xs == 1, x = (e(k).r - e(k).R)/e(k).theta; else, x = e(k).r; end
+                    ph = angle(e(k).u./interp1(e(k).r, e(k).u, e(k).R))/pi;   % phase relative to r = R
+                    ph(abs(e(k).u) < 1e-3) = NaN;
+                    if e(k).ref, st = {'k--', 'LineWidth', 1.2};
+                    else, st = {'-', 'Color', ccol(e(k).Rt), 'LineWidth', 1.2}; end
+                    plot(ax1, x, abs(e(k).u), st{:}, 'DisplayName', sprintf('R/\\theta = %.0f', e(k).Rt));
+                    plot(ax2, x, ph, st{:});
+                end
+                if xs == 1, xl = [-12 12]; xlab = '(r - R)/\theta'; else, xl = [0 1.6]; xlab = 'r / D_e'; end
+                xlim(ax1, xl); xlim(ax2, xl); ylim(ax2, [-1 1]); grid(ax1, 'on'); grid(ax2, 'on');
+                xlabel(ax1, xlab); xlabel(ax2, xlab); ylabel(ax1, '|u|/max'); ylabel(ax2, 'phase(u)/\pi');
+                title(ax1, sprintf('%s, m = %d', ftitle.(fams{fi}), ms(mi)));
+                if ~isempty(e), legend(ax1, 'Location', 'northwest', 'FontSize', 6); end
+            end
+        end
+        title(tl, 'T1: KH u-hat against jet-layer thickness (Tran two-tanh, inviscid; colour = R/\theta, black dashed = unmodified x = 3 mm fit)');
+        nm = {'uhat_vs_rtheta', 'uhat_vs_r'};
+        exportgraphics(f, fullfile(fd, [pre nm{xs} '.png']), 'Resolution', 110); close(f);
+    end
+    % --- Figure 2
+    mk = struct('b', 'o', 'cross', 's', 'a', '^'); col = struct('b', [0.85 0.2 0.1], 'cross', [0.1 0.45 0.85], 'a', [0.1 0.6 0.2]);
+    qs = {'inner', 'outer', 'pk2', 'c_Uj'};
+    ql = {'inner lobe / max (r < R - 3\theta)', 'outer lobe / max (R + 3\theta < r < r_2 - 3\theta)', ...
+          'second peak / main peak (separated by a minimum)', 'c_r / U_j'};
+    f = figure('Visible', 'off', 'Position', [0 0 1300 900]); tl = tiledlayout(2, 2, 'TileSpacing', 'compact');
+    for qi = 1:4
+        ax = nexttile(tl); hold(ax, 'on');
+        for fi = 1:numel(fams)
+            for mi = 1:numel(ms)
+                k = find(strcmp(T.family, fams{fi}) & T.m == ms(mi) & isfinite(T.ar) & ~T.noisy);
+                if isempty(k), continue; end
+                [~, o] = sort(T.ar_theta(k)); k = k(o);
+                fc = col.(fams{fi}); if ms(mi) == 1, fc = 'none'; end
+                plot(ax, T.ar_theta(k), T.(qs{qi})(k), ['-' mk.(fams{fi})], 'Color', col.(fams{fi}), ...
+                    'MarkerFaceColor', fc, 'DisplayName', sprintf('%s, m = %d', fams{fi}, ms(mi)));
+            end
+        end
+        set(ax, 'XScale', 'log'); grid(ax, 'on'); xlabel(ax, '\alpha_r \theta'); ylabel(ax, ql{qi});
+        if qi < 4, set(ax, 'YScale', 'log'); end
+        if qi == 3, yline(ax, S.thick_dbl, 'k:', 'HandleVisibility', 'off'); end
+        if qi == 4, yline(ax, 1, 'k:', 'HandleVisibility', 'off'); end
+        if qi == 1, legend(ax, 'Location', 'best'); end
+    end
+    title(tl, 'T1: KH u-hat lobes and phase speed against \alpha_r\theta (filled m = 0, open m = 1; noisy eigenvectors left out)');
+    exportgraphics(f, fullfile(fd, [pre 'lobes_vs_atheta.png']), 'Resolution', 110); close(f);
+    % --- Figure 3 (T4)
+    f = figure('Visible', 'off', 'Position', [0 0 1300 500]); tl = tiledlayout(1, 2, 'TileSpacing', 'compact');
+    ys = {'r_umin', 'r_c', 'r_vort'}; yl = {'min |u|', 'r_c (U = c_r)', 'peak |\omega_\theta|'}; lm = {'o', 'x', 'd'};
+    for mi = 1:numel(ms)
+        ax = nexttile(tl); hold(ax, 'on');
+        for fi = 1:numel(fams)
+            k = find(strcmp(T.family, fams{fi}) & T.m == ms(mi) & isfinite(T.ar) & ~T.noisy);
+            [~, o] = sort(T.ar_theta(k)); k = k(o);
+            for yi = 1:3
+                plot(ax, T.ar_theta(k), (T.(ys{yi})(k) - T.R(k))./T.theta(k), ['-' lm{yi}], 'Color', col.(fams{fi}), ...
+                    'DisplayName', sprintf('%s: %s', fams{fi}, yl{yi}));
+            end
+        end
+        set(ax, 'XScale', 'log'); grid(ax, 'on'); xlabel(ax, '\alpha_r \theta'); ylabel(ax, '(r - R)/\theta');
+        ylim(ax, [-10 10]); title(ax, sprintf('m = %d', ms(mi)));
+        if mi == 1, legend(ax, 'Location', 'best', 'FontSize', 7); end
+    end
+    title(tl, 'T4: radius of min |u| against the critical radius and the vorticity-perturbation peak');
+    exportgraphics(f, fullfile(fd, [pre 'T4_null_radius.png']), 'Resolution', 110); close(f);
 end
 
 % ---------------------------------------------------------------------------------------------- plots -----------
