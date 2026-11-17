@@ -66,7 +66,7 @@ matlab -batch "MODE='scan'; NWORKERS=20; lsa_local"
 | `single` | One station and St_D (`SINGLE_X`, `SINGLE_ST`; default 3.0 mm, 1.271; optional `SINGLE_N`, default 250, N_check = N + 50), m = 0 and 1: full spectrum, labels, eigenfunctions | `x_<x>_St_<St>[_N<N>][_<PROFILE>]_lsa_single.mat`, `..._lsa_single_spectrum.png` (`_N<N>` only when N ≠ 250; `_<PROFILE>` only when PROFILE ≠ tanh) |
 | `sensitivity` | x = 2.5, 4, 6, 7.5 mm, St_D 0.25, 1, 2: N 150/250/350, r_max 2.5 mm smaller, smoothing 0.025/0.1 mm | `lsa_sensitivity.csv` |
 | `scan` | All stations x St x m | `lsa_scan.mat`, `lsa_scan_m0.png`, `lsa_scan_m1.png`, `lsa_scan_radii.png` |
-| `thickness` | Test T1 (KH û shape against jet-layer thickness, user 2026-11-17): analytic Tran two-tanh base flows, R/θ 5-100, families b / cross / a (below) | `T1_kh_modes.csv`, `T1_thickness.mat`, `<date>_lsa_T1_*.png` |
+| `thickness` | Test T1 (KH û shape against jet-layer thickness, user 2026-11-17): analytic Tran two-tanh base flows, R/θ 5-100, families b / cross / a (below) | `T1_kh_modes.csv`, `T1_thickness.mat`, `<date>_lsa_T1_*.png`, `viewer/T1_<fam>_Rtheta<NNN|ref>_lsa_single.mat` |
 
 Every mode except `selfcheck` and `thickness` also writes `lsa_profiles.png` (raw and smoothed profiles); all write
 `lsa_local.log`. Optional `OUT_SUBDIR` names the output folder under `OUT_DIR` (default: the mode name).
@@ -96,6 +96,11 @@ No RANS data are read.
   double peak (that, and second peak ≥ 0.25), min-|û| radius, phase jumps, r_c (U = c_r) and the peak of
   |iαv̂ − dû/dr|. Lengths in D_e.
 - Options: `THICK_FAMS` (cell), `THICK_RTHETA`, `THICK_M`, `FIG_DIR` (figure folder; default the output folder).
+- `THICK_VIEWER` (default true, added 2026-11-18): also save one `MODE='single'`-format file per base flow in
+  `<out_dir>/viewer/` (every eigenvalue and eigenvector of both m, `prof`, `S`), so the LSA Viewer can open it
+  (about 30 MB each for b and cross, 10 MB for a). The dotted "RANS" lines are the x = 3 mm RANS line for b and cross
+  and the analytic profile itself for a; the viewer's 2D field is always the x = 3 mm SRP RANS (irrelevant for a).
+  `S.thick_info` holds the family, R/θ, θ, R, U_j, U₂, ω and the b factor.
 
 ## Mode labels (heuristics, not a Briggs-Bers analysis)
 

@@ -151,7 +151,9 @@ if exist('THICK_M', 'var'), S.thick_m = THICK_M; else, S.thick_m = [0 1]; end
 S.thick_Mj  = 1.09;                                     % family (a): Edgington-Mitchell 2020 A1 screech, cold jet
 S.thick_Stj = 0.67;                                     % family (a): St_j = f D_e / U_j
 S.thick_r2a = 1.5;                                      % family (a): a dummy outer radius 3R (only for make_grid)
-S.thick_dbl = 0.25;                                     % "visible double peak": 2nd peak >= this x max (own choice)
+if exist('THICK_VIEWER', 'var'), S.thick_viewer = THICK_VIEWER; else, S.thick_viewer = true; end  % one
+%   MODE='single'-format file per base flow in <out_dir>/viewer/ for the LSA Viewer (~30 MB each; user 2026-11-18)
+S.thick_dbl = 0.25;                                    % "visible double peak": 2nd peak >= this x max (own choice)
 if exist('FIG_DIR', 'var'), S.fig_dir = FIG_DIR; else, S.fig_dir = ''; end   % '' = the output folder
 
 % --- parallel workers (0 = serial)
@@ -819,6 +821,7 @@ function run_thickness(S)
         Rts = S.thick_Rtheta; if ~strcmp(fam, 'a'), Rts = [NaN, Rts]; end   % NaN = unmodified reference fit
         for Rt = Rts
             [P, info] = thick_base(fam, Rt, F0, P0, om_b, S);
+            out = struct('sol', {{}});                   % every mode of both m, for an LSA Viewer file
             for m = S.thick_m
                 sol = solve_case(P, m, info.omega, S.N, S, true);
                 chk = solve_case(P, m, info.omega, S.N_check, S, -1);
@@ -828,6 +831,7 @@ function run_thickness(S)
                 % R/theta 8, m = 0: converged KH mode with |u| peak 0.17 D_e inside r1, labelled 'other').
                 Sl = S; Sl.sl_window_mm = max(S.sl_window_mm, 4*info.theta*S.D_ref*1e3);
                 sol = label_modes(mark_converged(sol, chk, S), P, Sl);
+                out.sol{end+1} = sol;
                 i = find(sol.conv & strcmp(sol.label, 'KH_jet') & real(sol.alpha) > 0);
                 nKH = numel(i);
                 if isempty(i)
@@ -846,6 +850,7 @@ function run_thickness(S)
                 allKH = strjoin(arrayfun(@(z) sprintf('%.4f%+.4fi', real(z), imag(z)), sol.alpha(i)', 'UniformOutput', false), ' ');
                 rows(end+1, :) = [{fam, Rt, info.Rt, m, info.omega, nKH, allKH}, struct2cell(M)']; %#ok<AGROW>
             end
+            if S.thick_viewer, save_thick_single(out, P, P0, fam, Rt, info, S); end
         end
     end
     names = [{'family', 'Rtheta_target', 'Rtheta', 'm', 'omega', 'nKH', 'all_KH'}, fieldnames(thick_metrics([], [], P, info, S))'];
@@ -865,6 +870,24 @@ function run_thickness(S)
     end
     if numel(EF) > 0, plot_thickness(T, EF, S); end
     fprintf('T1 done in %.0f s\n', toc(t0));
+end
+
+function save_thick_single(out, P, P0, fam, Rt, info, S)
+% Save one T1 base flow as a MODE='single'-format file (out.sol{} with every eigenvalue and eigenvector of each m,
+% prof, S) so the LSA Viewer can open it. The *_raw (dotted "RANS") lines are the x = 3 mm RANS line for b and
+% cross (the line their fits came from) and the analytic profile itself for family a (it has no RANS).
+    if strcmp(fam, 'a'), P.U_raw = P.U; P.nu_raw = P.nu; P.p_raw = P.p;
+    else, P.U_raw = P0.U_raw; P.nu_raw = P0.nu_raw; P.p_raw = P0.p_raw; end
+    prof = P;
+    if isnan(Rt), rt = 'ref'; else, rt = sprintf('%03d', Rt); end
+    S.mode = 'single'; S.profile = 'tanh';
+    S.single_x_mm = P.x_mm; S.single_St = info.omega/(2*pi*(S.D_ref/S.D_body)*S.M_inf);   % St_D from omega
+    S.single_tag = sprintf('_T1_%s_Rtheta%s', fam, rt);
+    S.thick_info = info;                                 % family, R/theta, theta, R, U_j, U2, omega, b factor
+    d = fullfile(S.out_dir, 'viewer'); if ~exist(d, 'dir'), mkdir(d); end
+    fn = fullfile(d, sprintf('T1_%s_Rtheta%s_lsa_single.mat', fam, rt));
+    save(fn, 'out', 'prof', 'S', '-v7.3');
+    fprintf('viewer file: %s\n', fn);
 end
 
 function th = inner_theta(R, b, rmax)
