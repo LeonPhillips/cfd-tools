@@ -345,7 +345,7 @@ switch S.mode
                         'rpk', {cell(nm, nS)}, 'KH', nan(nm, nS), 'UP', nan(nm, nS));
             for im = 1:nm
                 for is = 1:nS
-                    om  = 2*pi*S.St(is)*S.M_inf;
+                    om  = St2omega(S.St(is));       % was 2*pi*St*M_inf (no D_e/D_body) until 2026-11-19
                     sol = solve_case(prof(k), S.m(im), om, S.N, S, false);
                     chk = solve_case(prof(k), S.m(im), om, S.N_check, S, -1);   % -1: eigenvalues only
                     sol = label_modes(mark_converged(sol, chk, S), prof(k), S);
