@@ -63,10 +63,19 @@ matlab -batch "MODE='scan'; NWORKERS=20; lsa_local"
 | MODE | What it does | Output (in `LSA/<MODE>/`) |
 |---|---|---|
 | `selfcheck` | Thin tanh jet (M_j 1.5, cold and nu_j = 1.5) against the exact compressible vortex sheet, R/theta = 20, 40, 80 | `selfcheck.csv`, PASSED/FAILED line in the log |
-| `single` | One station and St_D (`SINGLE_X`, `SINGLE_ST`; default 3.0 mm, 1.271; optional `SINGLE_N`, default 250, N_check = N + 50), m = 0 and 1: full spectrum, labels, eigenfunctions | `x_<x>_St_<St>[_N<N>][_<PROFILE>]_lsa_single.mat`, `..._lsa_single_spectrum.png` (`_N<N>` only when N ≠ 250; `_<PROFILE>` only when PROFILE ≠ tanh) |
+| `single` | One station and St_D (`SINGLE_X`, `SINGLE_ST`; default 3.0 mm, 1.271; optional `SINGLE_N`, default 250, N_check = N + 50), m = 0 and 1: full spectrum, labels, eigenfunctions. **St scan (2026-11-18):** a vector of St (set `S.single_St` near the top of `lsa_local.m`, or `SINGLE_ST`) solves every St at the one station (parfor over St with `NWORKERS`) into one file. `SAVE_V`: `'converged'` (default) saves eigenvectors only of converged, non-continuum modes; `'all'` saves every one (see below) | `x_<x>_St_<St>[_N<N>][_<PROFILE>]_lsa_single.mat`, `..._lsa_single_spectrum.png` (`_N<N>` only when N ≠ 250; `_<PROFILE>` only when PROFILE ≠ tanh) |
 | `sensitivity` | x = 2.5, 4, 6, 7.5 mm, St_D 0.25, 1, 2: N 150/250/350, r_max 2.5 mm smaller, smoothing 0.025/0.1 mm | `lsa_sensitivity.csv` |
 | `scan` | All stations x St x m | `lsa_scan.mat`, `lsa_scan_m0.png`, `lsa_scan_m1.png`, `lsa_scan_radii.png` |
 | `thickness` | Test T1 (KH û shape against jet-layer thickness, user 2026-11-17): analytic Tran two-tanh base flows, R/θ 5-100, families b / cross / a (below) | `T1_kh_modes.csv`, `T1_thickness.mat`, `<date>_lsa_T1_*.png`, `viewer/T1_<fam>_Rtheta<NNN|ref>_lsa_single.mat` |
+
+**St scan file (`MODE='single'` with several St; cfd-tools bcbbdaf, 07860ea).** `out.sol{iSt, im}` (row = St, column = m;
+a one-St file is 1 x nm, as before), named `x_<x>_St_<min>-<max>_n<nSt>[tags]_lsa_single.mat`, with one
+`..._spectrum.png` (converged non-continuum eigenvalues coloured by St, and the most unstable KH_jet against St).
+Every eigenvalue, label, cg, conv and peak radius is saved for every mode; `sol.labid` (uint8, 1-5 = KH_jet, KH_outer,
+upstream_jet, other, continuum) repeats the labels for fast reading; `sol.Vidx` lists which modes the columns of
+`sol.V` are. With `SAVE_V='converged'` the |p|/|u| arrays `pabs`/`uabs` are not saved. Size (x = 3 mm, N 250, m 0/1):
+about 3.2 MB per St with `'converged'` (test of 3 St: 9.5 MB, 83 s with 3 workers), about 31 MB per St with `'all'`.
+Opened by LSA Viewer v1.0.
 
 Every mode except `selfcheck` and `thickness` also writes `lsa_profiles.png` (raw and smoothed profiles); all write
 `lsa_local.log`. Optional `OUT_SUBDIR` names the output folder under `OUT_DIR` (default: the mode name).
