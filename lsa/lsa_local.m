@@ -42,7 +42,7 @@
 %       module load matlab/r2023b
 %       matlab -batch "MODE='selfcheck'; lsa_local"
 %   MODE = 'selfcheck'   : thin tanh jet against the exact compressible vortex sheet (checks the operator)
-%          'single'      : one station, one St: full spectrum, mode labels, eigenfunctions (for looking)
+%          'single'      : one station, one St or a list of St: full spectrum, mode labels, eigenfunctions (for looking)
 %          'sensitivity' : a few stations/St with N, r_max and smoothing varied (is the answer converged?)
 %          'scan'        : all stations x all St x m = 0, 1 (the main result)
 %          'profiles'    : all stations, base-flow profiles and fits only (no eigenvalues): check the tanh fits
@@ -50,8 +50,10 @@
 %                          flows built from the x = 3 mm single-run fits (see run_thickness and README.md)
 %   Optional workspace variables: BASEFLOW_DIR, OUT_DIR (default to the M3 paths below), NWORKERS,
 %   PROFILE ('tanh', the default: Tran's fitted profiles; or 'smooth': the smoothed RANS profile),
-%   SINGLE_X [mm] and SINGLE_ST (station and St_D of MODE='single'; defaults 3.0 and 1.271), SINGLE_N (N of
-%   MODE='single', default 250; N_check = N + 50; files tagged _N<N>).
+%   SINGLE_X [mm] and SINGLE_ST (station and St_D of MODE='single'; defaults 3.0 and 1.271; a vector of St = an
+%   St scan saved in one file, x_<x>_St_<min>-<max>_n<nSt>_lsa_single.mat, St in parallel over NWORKERS),
+%   SINGLE_N (N of MODE='single', default 250; N_check = N + 50; files tagged _N<N>), SAVE_V ('converged', the
+%   default: eigenvectors only of converged, non-continuum modes; or 'all').
 %
 % OUTPUT: <OUT_DIR>/<MODE>/ : a .mat file with everything, PNG figures, and a text log.
 %
@@ -129,7 +131,21 @@ S.sl_window_mm  = 0.6;                                  % a KH mode's |p| peak m
 
 % --- 'single' mode
 if exist('SINGLE_X', 'var'), S.single_x_mm = SINGLE_X; else, S.single_x_mm = 3.0; end    % station [mm]
-if exist('SINGLE_ST', 'var'), S.single_St = SINGLE_ST; else, S.single_St = 1.271; end   % St_D (user, 2026-11-12)
+% St_D of MODE='single' (user, 2026-11-12). One value = one St, as before. A VECTOR = an St scan: every St is solved
+% at this one station and all of them are saved in ONE file (out.sol{iSt, im}; user, 2026-11-18). Edit the list
+% here, or set SINGLE_ST before calling the script (that overrides this line).
+S.single_St = 1.271;
+% S.single_St = (1:256) * 0.00619928621565759;           % e.g. the SPOD St bins up to 1.587 (St = 0 left out: omega = 0)
+if exist('SINGLE_ST', 'var'), S.single_St = SINGLE_ST; end
+S.single_St = S.single_St(:).';                         % row vector
+% SAVE_V: which eigenvectors MODE='single' saves (user, 2026-11-18). Eigenvalues, labels, cg, conv and peak radii
+% are always saved for EVERY mode; only the eigenvectors (about 20 kB each at N = 250) are thinned.
+%   'converged' (default): only modes that are converged AND not labelled continuum (~60-95 of ~820 per m and St)
+%   'all'                : every mode (as before 2026-11-18; ~31 MB per St for m = 0 and 1)
+% sol.Vidx lists which modes (indices into sol.alpha) the columns of sol.V belong to. With 'converged' the
+% |p| and |u| arrays pabs/uabs (n x nmodes, as big as V's real part) are not saved either.
+if exist('SAVE_V', 'var'), S.save_V = SAVE_V; else, S.save_V = 'converged'; end
+if ~any(strcmp(S.save_V, {'converged', 'all'})), error('SAVE_V must be ''converged'' or ''all'''); end
 % SINGLE_N overrides N (N_check = N + 50, as in the sensitivity variants); a non-default N is tagged in the file
 % names as _N<N> before the lsa_single ending, so the N = 250 files keep their names (user, 2026-11-16).
 if exist('SINGLE_N', 'var') && strcmp(S.mode, 'single'), S.N = SINGLE_N; S.N_check = SINGLE_N + 50; end
@@ -248,19 +264,40 @@ St2omega = @(St) 2*pi*St*(S.D_ref/S.D_body)*S.M_inf;
 
 switch S.mode
     case 'single'
-        % One station and one St, both m: keep every eigenvalue and eigenvector so we can look at them.
-        out = struct();
-        for im = 1:numel(S.m)
-            sol = solve_case(prof(1), S.m(im), St2omega(S.single_St), S.N, S, true);   % true = keep eigenvectors
-            chk = solve_case(prof(1), S.m(im), St2omega(S.single_St), S.N_check, S, -1);   % -1: eigenvalues only
-            sol = mark_converged(sol, chk, S);          % flag eigenvalues that also appear at N_check
-            sol = label_modes(sol, prof(1), S);         % KH_jet / KH_outer / upstream_jet / other
-            out.sol{im} = sol;
-            print_modes(sol, S);
+        % One station, one St or a list of St (an St scan), both m: every eigenvalue, and the eigenvectors SAVE_V
+        % asks for. out.sol{iSt, im}: row = St (S.single_St(iSt)), column = m (S.m(im)). A one-St file is 1 x nm,
+        % the same layout as before 2026-11-18.
+        nS = numel(S.single_St); nm = numel(S.m);
+        sols = cell(nS, nm);
+        if S.nworkers > 0 && nS > 1 && isempty(gcp('nocreate')), parpool(S.nworkers); end
+        P1 = prof(1);
+        parfor (is = 1:nS, S.nworkers * (nS > 1))       % St in parallel (a normal for-loop when nworkers = 0)
+            row = cell(1, nm);
+            for im = 1:nm
+                om  = St2omega(S.single_St(is));
+                sol = solve_case(P1, S.m(im), om, S.N, S, true);       % true = keep eigenvectors
+                chk = solve_case(P1, S.m(im), om, S.N_check, S, -1);   % -1: eigenvalues only
+                sol = mark_converged(sol, chk, S);      % flag eigenvalues that also appear at N_check
+                sol = label_modes(sol, P1, S);          % KH_jet / KH_outer / upstream_jet / other
+                print_modes(sol, S);
+                if nS > 1, sol = thin_vectors(sol, S); end   % a scan: thin now, so workers return little data
+                row{im} = sol;
+            end
+            sols(is, :) = row;
+            if nS > 1, fprintf('St_D = %.4f done\n', S.single_St(is)); end
         end
-        plot_single(out, prof(1), S);
-        save(fullfile(S.out_dir, sprintf('x_%1.1f_St_%2.2f%s_lsa_single.mat', S.single_x_mm, S.single_St, S.single_tag)), ...
-             'out', 'prof', 'S', '-v7.3');                % file name carries x and St (user, 2026-11-12)
+        out = struct(); out.sol = sols;
+        if nS == 1
+            plot_single(out, P1, S);                    % needs every eigenvector: plot before thinning
+            for im = 1:nm, out.sol{1, im} = thin_vectors(out.sol{1, im}, S); end
+            fn = sprintf('x_%1.1f_St_%2.2f%s_lsa_single', S.single_x_mm, S.single_St, S.single_tag);
+        else                                            % file name: x, St range and number of St
+            fn = sprintf('x_%1.1f_St_%.2f-%.2f_n%d%s_lsa_single', S.single_x_mm, min(S.single_St), ...
+                         max(S.single_St), nS, S.single_tag);
+            plot_single_scan(out, P1, S, fn);
+        end
+        save(fullfile(S.out_dir, [fn '.mat']), 'out', 'prof', 'S', '-v7.3');   % file name carries x and St (2026-11-12)
+        fprintf('saved %s.mat (SAVE_V = %s)\n', fullfile(S.out_dir, fn), S.save_V);
 
     case 'sensitivity'
         % Repeat a few cases with one numerical choice changed at a time, and tabulate the KH and upstream alphas.
@@ -1125,6 +1162,41 @@ function plot_single(out, P, S)
     end
     exportgraphics(f, fullfile(S.out_dir, sprintf('x_%1.1f_St_%2.2f%s_lsa_single_spectrum.png', S.single_x_mm, ...
         S.single_St, S.single_tag)),'Resolution', 130); close(f);
+end
+
+function sol = thin_vectors(sol, S)
+% Keep only the eigenvectors SAVE_V asks for (MODE='single', user 2026-11-18). sol.Vidx = the modes (indices into
+% sol.alpha) that the columns of sol.V belong to; every eigenvalue, label, cg, conv and peak radius stays.
+    if strcmp(S.save_V, 'all')
+        sol.Vidx = 1:numel(sol.alpha);
+        return;
+    end
+    k = find(sol.conv(:) & ~strcmp(sol.label(:), 'continuum')).';   % 'converged': converged and not continuum
+    sol.V = sol.V(:, k); sol.Vidx = k;
+    sol = rmfield(sol, intersect({'pabs', 'uabs'}, fieldnames(sol)));   % n x nmodes each: as big as V's real part
+end
+
+function plot_single_scan(out, P, S, fn)
+% MODE='single' with several St: one figure. Top: the converged, non-continuum eigenvalues of every St, coloured
+% by St (one panel per m). Bottom: the most unstable converged KH_jet mode (-alpha_i and alpha_r) against St.
+    [nS, nm] = size(out.sol); St = S.single_St;
+    f = figure('Visible', 'off', 'Position', [0 0 1500 900]);
+    for im = 1:nm
+        subplot(2, nm, im); hold on;
+        for is = 1:nS
+            s = out.sol{is, im}; i = s.conv & ~strcmp(s.label, 'continuum');
+            scatter(real(s.alpha(i)), imag(s.alpha(i)), 10, St(is)*ones(sum(i), 1), 'filled');
+        end
+        colormap(gca, parula); cb = colorbar; cb.Label.String = 'St_D'; clim([min(St) max(St) + eps]);
+        xlabel('\alpha_r D_e'); ylabel('\alpha_i D_e'); grid on; yline(0, 'k');
+        title(sprintf('m = %d, x = %.2f mm: converged, not continuum', S.m(im), P.x_mm));
+        kh = nan(1, nS);
+        for is = 1:nS, kh(is) = pick_branches(out.sol{is, im}); end
+        subplot(2, nm, nm + im); yyaxis left; plot(St, -imag(kh), 'o-', 'MarkerSize', 3); ylabel('-\alpha_i D_e');
+        yyaxis right; plot(St, real(kh), 's-', 'MarkerSize', 3); ylabel('\alpha_r D_e');
+        xlabel('St_D'); grid on; title(sprintf('m = %d: most unstable converged KH\\_jet mode', S.m(im)));
+    end
+    exportgraphics(f, fullfile(S.out_dir, [fn '_spectrum.png']), 'Resolution', 130); close(f);
 end
 
 function plot_scan(R, prof, S)

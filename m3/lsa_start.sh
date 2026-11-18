@@ -4,13 +4,15 @@
 # ssh straight to the compute node fails host-key verification (2026-11-10), so the step runs with srun --overlap.
 # srun counts as submitting: ask the user first (M3 rules).
 # Usage (from the PC):  ssh ... 'MODE=sensitivity JOBID=62565221 CPUS=8 MEM=32G bash -s' < scripts/m3/lsa_start.sh
-#   MODE=single also takes SINGLE_X [mm] and SINGLE_ST (St_D); unset = lsa_local's defaults (3.0 mm, 1.271).
+#   MODE=single also takes SINGLE_X [mm], SINGLE_ST (St_D; a list without spaces, e.g. '[1.0,1.271]', is an St scan in
+#   one file: set NWORKERS for St in parallel) and SAVE_V (converged|all); unset = lsa_local's defaults.
 #   Output of MODE=single: single/x_<x>_St_<St>_lsa_single.mat and _spectrum.png (x to 1 dp, St to 2 dp).
 set -euo pipefail
 MODE=${MODE:?set MODE}; JOBID=${JOBID:?set JOBID}; CPUS=${CPUS:-8}; MEM=${MEM:-32G}; NWORKERS=${NWORKERS:-0}
 EXTRA=""                                                          # optional MATLAB workspace variables
 [ -n "${SINGLE_X:-}" ]  && EXTRA="$EXTRA SINGLE_X=$SINGLE_X;"
 [ -n "${SINGLE_ST:-}" ] && EXTRA="$EXTRA SINGLE_ST=$SINGLE_ST;"
+[ -n "${SAVE_V:-}" ]    && EXTRA="$EXTRA SAVE_V='\''$SAVE_V'\'';"
 TOOLS=/scratch/qk75/LeonPhillips/PhD/cfd/su2/cfd-tools
 WORK=/scratch/qk75/LeonPhillips/PhD/LSA
 
