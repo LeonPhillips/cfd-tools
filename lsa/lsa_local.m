@@ -1167,6 +1167,10 @@ end
 function sol = thin_vectors(sol, S)
 % Keep only the eigenvectors SAVE_V asks for (MODE='single', user 2026-11-18). sol.Vidx = the modes (indices into
 % sol.alpha) that the columns of sol.V belong to; every eigenvalue, label, cg, conv and peak radius stays.
+% sol.labid (uint8) repeats the labels as numbers, 1-5 = KH_jet, KH_outer, upstream_jet, other, continuum (0 = any
+% other): a reader gets them in one read instead of one HDF5 reference per mode (420k for a 257-St file).
+    [~, id] = ismember(sol.label, {'KH_jet', 'KH_outer', 'upstream_jet', 'other', 'continuum'});
+    sol.labid = uint8(id);
     if strcmp(S.save_V, 'all')
         sol.Vidx = 1:numel(sol.alpha);
         return;
