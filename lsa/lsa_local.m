@@ -153,6 +153,49 @@ if S.N == 250, S.single_tag = ''; else, S.single_tag = sprintf('_N%d', S.N); end
 % a non-default profile is tagged too (_smooth), so it never overwrites the tanh files (2026-11-17)
 if ~strcmp(S.profile, 'tanh'), S.single_tag = [S.single_tag '_' S.profile]; end
 
+% --- which flow (user, 2026-11-24): CASE = 'srp' (default: the counterflow jet, everything above) or 'freejet'
+%     (the srp_M2.5 nozzle without counterflow, p0j 6.6 bar into still air at 1 atm, 288.15 K; Gadi/M3 case
+%     srp_M2.5_freeJet, fine mesh, final stage t4). For 'freejet' (confirmed assumptions, user 2026-11-24):
+%   - scales: lengths by D_e (as above); velocity, density, pressure by the STILL AMBIENT: a_amb, rho_amb, p by
+%     rho_amb a_amb^2 (ambient p = 1/gamma). There is no free stream, so M_inf = 0.
+%   - St_j = f D_j / U_j with D_j, U_j of the ideally expanded jet (isentropic from NPR and T0; D_j from the mass
+%     flow through the throat, D* = D_e/sqrt(A_e/A*)), so omega = 2 pi St_j (U_j/D_j) D_e / a_amb.
+%   - r_max fixed (no bow shock), Dirichlet there.
+%   - Tran's two-tanh fits with the far-field constant FIXED at ambient (U 0, rho 1, p 1/gamma), as in Tran eqs.
+%     3.1-3.3 (their jets also exhaust into still air). r1 = the U-fit layer at the jet edge; r2 (the second grid
+%     cluster, and the 'KH_outer' window of label_modes) = the rho-fit layer away from the jet edge, i.e. the
+%     barrel-shock layer INSIDE the jet (r2 < r1 is allowed for this case).
+if exist('CASE', 'var'), S.case = CASE; else, S.case = 'srp'; end
+S.U_j = NaN; S.D_j = NaN; S.om_per_St = 2*pi*(S.D_ref/S.D_body)*S.M_inf;   % srp: omega = St_D * this
+S.c_fix = [];                                           % [] = fit the far-field constant c (srp)
+S.st_name = 'St_D';                                     % label of St in prints and plots
+if strcmp(S.case, 'freejet')
+    S.R_gas = 287.058;                                  % J/(kg K), SU2's default for air
+    S.p_amb = 101325; S.T_amb = 288.15;                 % still ambient [Pa, K]
+    S.p0j = 6.6e5; S.T0j = 288.15;                      % jet stagnation state (RANS inlet) [Pa, K]
+    S.AeAt = 1.3225;                                    % nozzle expansion ratio A_e/A* (= 1.15^2)
+    S.a_inf   = sqrt(S.gamma*S.R_gas*S.T_amb);          % 340.30 m/s
+    S.rho_inf = S.p_amb/(S.R_gas*S.T_amb);              % 1.2250 kg/m3
+    S.U_inf = 0; S.M_inf = 0;                           % still air
+    g = S.gamma; NPR = S.p0j/S.p_amb;
+    S.M_j = sqrt(2/(g-1)*(NPR^((g-1)/g) - 1));          % ideally expanded Mach number (1.882)
+    AR = @(M) (1./M).*((2/(g+1))*(1 + (g-1)/2*M.^2)).^((g+1)/(2*(g-1)));   % isentropic A/A*
+    S.D_j = S.D_ref/sqrt(S.AeAt)*sqrt(AR(S.M_j));       % 4.952 mm
+    S.U_j = S.M_j*sqrt(g*S.R_gas*S.T0j/(1 + (g-1)/2*S.M_j^2));   % 489.9 m/s
+    S.om_per_St = 2*pi*(S.U_j/S.D_j)*S.D_ref/S.a_inf;   % omega = St_j * this (8.40)
+    S.st_name = 'St_j';
+    S.c_fix = [0, 1, 1/S.gamma];                        % far-field U, rho, p in code units
+    if exist('FJ_RMAX', 'var'), S.fj_rmax_mm = FJ_RMAX; else, S.fj_rmax_mm = 20; end   % r_max [mm]
+    if ~exist('BASEFLOW_DIR', 'var')
+        S.baseflow_dir = '/scratch/qk75/LeonPhillips/PhD/LSA/baseflow/srp_M2.5_freeJet_meshFine_t4';
+    end
+    S.single_St = (1:91)*0.005;                         % St_j 0.005..0.455 (45 kHz), user 2026-11-24
+    if exist('SINGLE_ST', 'var'), S.single_St = SINGLE_ST(:).'; end
+    S.single_tag = [S.single_tag '_freeJet'];
+    if S.fj_rmax_mm ~= 20, S.single_tag = sprintf('%s_rmax%g', S.single_tag, S.fj_rmax_mm); end
+    if ~strcmp(S.profile, 'tanh'), error('CASE=''freejet'' supports PROFILE=''tanh'' only'); end
+end
+
 % --- 'sensitivity' mode
 S.sens_x_mm = [2.5 4.0 6.0 7.5];
 S.sens_St   = [0.25 1.0 2.0];
@@ -260,7 +303,8 @@ end
 %% 6. Solve the eigenvalue problems -------------------------------------------------------------------------------
 % omega in our units: omega = 2*pi*f*D_e/a_inf, with St_D = f*D_body/U_inf (St keeps the body diameter), so
 % omega = 2*pi*St_D*(D_e/D_body)*(U_inf/a_inf) = 2*pi*St_D*(D_e/D_body)*M_inf.
-St2omega = @(St) 2*pi*St*(S.D_ref/S.D_body)*S.M_inf;
+% CASE='freejet': St is St_j = f D_j/U_j and omega = 2*pi*St_j*(U_j/D_j)*D_e/a_amb. Both are St*S.om_per_St.
+St2omega = @(St) St*S.om_per_St;
 
 switch S.mode
     case 'single'
@@ -284,7 +328,7 @@ switch S.mode
                 row{im} = sol;
             end
             sols(is, :) = row;
-            if nS > 1, fprintf('St_D = %.4f done\n', S.single_St(is)); end
+            if nS > 1, fprintf('%s = %.4f done\n', S.st_name, S.single_St(is)); end
         end
         out = struct(); out.sol = sols;
         if nS == 1
@@ -385,12 +429,16 @@ function P = radial_profile(x_mm, FU, Fnu, Fp, FM, S)
     r1 = r(i1);
 
     % --- bow shock: first radius beyond the jet where the flow is back to free stream (U = -M_inf, Mach = 2.5)
+    if strcmp(S.case, 'freejet')                        % free jet: no bow shock, r_max fixed (user, 2026-11-24)
+        r_bs = NaN; rmax = S.fj_rmax_mm/L;
+    else
     ibs = find(r > r1 + 1/L & U < -0.98*S.M_inf & M > 0.98*S.M_inf, 1);
     r_bs = r(ibs);
 
     % --- r_max: stay inside the bow shock, by a gap plus three smoothing lengths (so the smoothing does not
     %     pull the shock jump into the domain)
     rmax = r_bs - (S.rmax_gap_mm + 3*S.smooth_mm)/L;
+    end
 
     % --- cut the line at r_max and smooth each variable (penalised least squares, see whittaker below)
     in  = r <= rmax;  r = r(in);
@@ -404,6 +452,11 @@ function P = radial_profile(x_mm, FU, Fnu, Fp, FM, S)
     win = r > r1 + 0.5/L & r < rmax - 0.5/L;            % search window (avoid the jet layer and the edge)
     [~, j2] = max(abs(dUs) .* win);
     r2 = r(j2);
+    if strcmp(S.case, 'freejet')                        % free jet: second layer = barrel shock inside the jet,
+        inj = r > 0.2/L & r < r1 - 0.3/L;               % the steepest smoothed |d rho/dr| well inside r1
+        [~, j2] = max(abs(dnus ./ nus.^2) .* inj);
+        r2 = r(j2);
+    end
 
     P = struct('x_mm', x_mm, 'r', r, 'U', Us, 'nu', nus, 'p', ps, 'dU', dUs, 'dnu', dnus, 'dp', dps, ...
                'U_raw', U(in), 'nu_raw', nu(in), 'p_raw', p(in), 'r1', r1, 'r2', r2, 'r_bs', r_bs, 'rmax', rmax);
@@ -412,15 +465,20 @@ function P = radial_profile(x_mm, FU, Fnu, Fp, FM, S)
     if strcmp(S.profile, 'tanh')
         d0 = S.fit_delta0_mm / L;                       % starting half-thicknesses in units of D_e
         dmin = S.fit_delta_min_mm / L;                  % minimum half-thickness in units of D_e
-        fU = fit_tanh2(r, U(in),       r1, r2, d0, dmin);     % U(r)          (Tran eq. 3.1)
-        fR = fit_tanh2(r, 1./nu(in),   r1, r2, d0, dmin);     % rho(r) = 1/nu (Tran eq. 3.2 fits 1/nu, i.e. density)
-        fP = fit_tanh2(r, p(in),       r1, r2, d0, dmin);     % p(r)          (Tran eq. 3.3)
+        cf = S.c_fix; if isempty(cf), cf = [NaN NaN NaN]; end  % NaN = fit c; freejet: c fixed at ambient
+        fU = fit_tanh2(r, U(in),       r1, r2, d0, dmin, cf(1));   % U(r)          (Tran eq. 3.1)
+        fR = fit_tanh2(r, 1./nu(in),   r1, r2, d0, dmin, cf(2));   % rho(r) = 1/nu (Tran eq. 3.2 fits 1/nu, i.e. density)
+        fP = fit_tanh2(r, p(in),       r1, r2, d0, dmin, cf(3));   % p(r)          (Tran eq. 3.3)
         [P.U, P.dU] = eval_tanh2(fU, r);                % analytic values and exact r-derivatives
         [rho, drho] = eval_tanh2(fR, r);
         P.nu = 1 ./ rho; P.dnu = -drho ./ rho.^2;       % nu = 1/rho, so dnu/dr = -(drho/dr)/rho^2
         [P.p, P.dp] = eval_tanh2(fP, r);
         P.fit = struct('U', fU, 'rho', fR, 'p', fP);
         P.r1 = fU.R(1); P.r2 = fU.R(2);                 % shear-layer radii of the U fit drive the grid mapping
+        if strcmp(S.case, 'freejet')                    % jet edge = the U layer nearest the half-velocity radius;
+            [~, k1] = min(abs(fU.R - r1)); P.r1 = fU.R(k1);     % barrel shock = the rho layer farther from it
+            [~, k2] = max(abs(fR.R - P.r1)); P.r2 = fR.R(k2);
+        end
     end
 
     % --- uniform mean pressure (S.profile = 'uniformp' or 'cb', user 2026-11-17): U as a tanh fit, a uniform pbar,
@@ -449,7 +507,10 @@ function P = radial_profile(x_mm, FU, Fnu, Fp, FM, S)
     end
 end
 
-function F = fit_tanh2(r, y, Rg1, Rg2, d0, dmin)
+function F = fit_tanh2(r, y, Rg1, Rg2, d0, dmin, cfix)
+% cfix (optional, CASE='freejet', 2026-11-24): a value fixes c, as Tran does (far field = still ambient);
+% missing or NaN fits c.
+    if nargin < 7, cfix = NaN; end
 % Fit Tran et al. (2026) eqs. 3.1-3.3, two tanh shear layers, to a profile y(r):
 %   y(r) = A1*T(r; R1, b1) + A2*T(r; R2, b2) + c,   T(r; R, b) = 0.5*(1 + tanh(b*(R/r - r/R)))
 % T is 1 on the axis, 1/2 at r = R and 0 far out, so A1 + A2 + c is the core value, A2 + c the value between the
@@ -466,24 +527,30 @@ function F = fit_tanh2(r, y, Rg1, Rg2, d0, dmin)
         for db = d0
             q0 = log([Rg1, da - dmin, Rg2, db - dmin]);
             opt = optimset('MaxFunEvals', 4000, 'MaxIter', 4000, 'TolX', 1e-7, 'TolFun', 1e-12, 'Display', 'off');
-            q = fminsearch(@(q) tanh2_cost(q, r, y, dmin), q0, opt);
-            c = tanh2_cost(q, r, y, dmin);
+            q = fminsearch(@(q) tanh2_cost(q, r, y, dmin, cfix), q0, opt);
+            c = tanh2_cost(q, r, y, dmin, cfix);
             if c < best.cost, best = struct('cost', c, 'q', q); end
         end
     end
-    [~, coef, R, b] = tanh2_cost(best.q, r, y, dmin);
+    [~, coef, R, b] = tanh2_cost(best.q, r, y, dmin, cfix);
     F = struct('R', R, 'b', b, 'delta', R./(2*b), 'A', coef(1:2)', 'c', coef(3));   % delta: half-thicknesses
     yf = eval_tanh2(F, r);
     F.R2 = 1 - sum((y - yf).^2) / sum((y - mean(y)).^2);   % coefficient of determination
 end
 
-function [cost, coef, R, b] = tanh2_cost(q, r, y, dmin)
+function [cost, coef, R, b] = tanh2_cost(q, r, y, dmin, cfix)
 % Sum of squared residuals of the best linear (A1, A2, c) for q = log([R1, delta1 - dmin, R2, delta2 - dmin]).
+% With a finite cfix, c = cfix and only A1, A2 are fitted.
+    if nargin < 5, cfix = NaN; end
     v = exp(q); dl = dmin + v([2 4]);                   % half-thicknesses, never below dmin
     bb = v([1 3]) ./ (2*dl);                            % b = R/(2*delta)
     [R, k] = sort(v([1 3])); b = bb(k);                 % keep R1 < R2 (inner layer first)
     B = [tanhT(r, R(1), b(1)), tanhT(r, R(2), b(2)), ones(size(r))];
-    coef = B \ y;                                       % linear least squares for A1, A2, c
+    if isfinite(cfix)
+        coef = [B(:, 1:2) \ (y - cfix); cfix];          % c fixed at the ambient value (Tran eqs. 3.1-3.3)
+    else
+        coef = B \ y;                                   % linear least squares for A1, A2, c
+    end
     cost = sum((B*coef - y).^2);
     if R(2) > r(end) || R(1) < 1e-4 || R(2) - R(1) < 1e-3, cost = cost * 10 + 1; end   % keep layers in the domain
 end
@@ -720,8 +787,8 @@ function [kh, up] = pick_branches(sol)
 end
 
 function print_modes(sol, S)
-    fprintf('\nm = %d, omega = %.3f (St_D = %.3f): %d eigenvalues kept, %d converged\n', sol.m, sol.omega, ...
-        sol.omega/(2*pi*(S.D_ref/S.D_body)*S.M_inf), numel(sol.alpha), sum(sol.conv));
+    fprintf('\nm = %d, omega = %.3f (%s = %.3f): %d eigenvalues kept, %d converged\n', sol.m, sol.omega, S.st_name, ...
+        sol.omega/S.om_per_St, numel(sol.alpha), sum(sol.conv));   % St_D (srp) or St_j (freejet)
     fprintf('  of the converged: %d continuum, %d other\n', sum(sol.conv & strcmp(sol.label, 'continuum')), sum(sol.conv & strcmp(sol.label, 'other')));
     i = find(sol.conv & ~ismember(sol.label, {'other', 'continuum'}));   % print only the labelled waves
     for j = i'
@@ -1146,7 +1213,7 @@ function plot_single(out, P, S)
                 'DisplayName', sprintf('%s (%d)', lab{1}, sum(i)));
         end
         xlabel('\alpha_r D_e'); ylabel('\alpha_i D_e'); grid on; yline(0, 'k', 'HandleVisibility', 'off');
-        title(sprintf('m = %d, St_D = %.2f, x = %.2f mm', s.m, S.single_St, P.x_mm));
+        title(sprintf('m = %d, %s = %.2f, x = %.2f mm', s.m, S.st_name, S.single_St, P.x_mm), 'Interpreter', 'none');
         legend('Interpreter', 'none', 'Location', 'best');
         subplot(2, 2, im + 2); hold on;
         n = numel(s.r);
@@ -1191,14 +1258,14 @@ function plot_single_scan(out, P, S, fn)
             s = out.sol{is, im}; i = s.conv & ~strcmp(s.label, 'continuum');
             scatter(real(s.alpha(i)), imag(s.alpha(i)), 10, St(is)*ones(sum(i), 1), 'filled');
         end
-        colormap(gca, parula); cb = colorbar; cb.Label.String = 'St_D'; clim([min(St) max(St) + eps]);
+        colormap(gca, parula); cb = colorbar; cb.Label.String = S.st_name; clim([min(St) max(St) + eps]);
         xlabel('\alpha_r D_e'); ylabel('\alpha_i D_e'); grid on; yline(0, 'k');
         title(sprintf('m = %d, x = %.2f mm: converged, not continuum', S.m(im), P.x_mm));
         kh = nan(1, nS);
         for is = 1:nS, kh(is) = pick_branches(out.sol{is, im}); end
         subplot(2, nm, nm + im); yyaxis left; plot(St, -imag(kh), 'o-', 'MarkerSize', 3); ylabel('-\alpha_i D_e');
         yyaxis right; plot(St, real(kh), 's-', 'MarkerSize', 3); ylabel('\alpha_r D_e');
-        xlabel('St_D'); grid on; title(sprintf('m = %d: most unstable converged KH\\_jet mode', S.m(im)));
+        xlabel(S.st_name, 'Interpreter', 'none'); grid on; title(sprintf('m = %d: most unstable converged KH\\_jet mode', S.m(im)));
     end
     exportgraphics(f, fullfile(S.out_dir, [fn '_spectrum.png']), 'Resolution', 130); close(f);
 end

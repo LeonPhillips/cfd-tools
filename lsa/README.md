@@ -58,7 +58,25 @@ matlab -batch "MODE='selfcheck'; lsa_local"
 matlab -batch "MODE='single'; lsa_local"
 matlab -batch "MODE='sensitivity'; lsa_local"
 matlab -batch "MODE='scan'; NWORKERS=20; lsa_local"
+matlab -batch "CASE='freejet'; MODE='single'; OUT_SUBDIR='single_freeJet'; NWORKERS=20; lsa_local"
 ```
+
+### Free jet (`CASE='freejet'`, user 2026-11-24)
+
+The srp_M2.5 nozzle without counterflow (`cases/srp_M2.5_freeJet`, p0j 6.6 bar into still air at 1 atm, 288.15 K).
+The base flow is the fine-mesh final stage `t4_cap3`, exported with `gsa/baseflow/export_baseflow.py` to
+`LSA/baseflow/srp_M2.5_freeJet_meshFine_t4/su2L_*`. Confirmed assumptions:
+
+- Station x = 3.0 mm (same frame as the counterflow case). Lengths and alpha by D_e = 4.6 mm; velocity, density and
+  pressure by the still ambient (a = 340.30 m/s, rho = 1.2250 kg/m3, ambient p = 1/gamma).
+- **St_j = f D_j/U_j**, ideally expanded jet: M_j = 1.882 (isentropic from NPR 6.514), T0 = 288.15 K, U_j = 489.9 m/s,
+  D_j = 4.952 mm from the throat D* = D_e/sqrt(1.3225) = 4.0 mm. omega = 2 pi St_j (U_j/D_j) D_e/a = 8.40 St_j.
+  Default scan St_j 0.005-0.455 in 0.005 steps (up to 45 kHz); `SINGLE_ST` overrides.
+- r_max fixed at 20 mm (`FJ_RMAX` overrides; a non-default value is tagged `_rmax<mm>`), Dirichlet there.
+- Tran eqs. 3.1-3.3 two-tanh fits with the far-field constant **fixed** at ambient (U 0, rho 1, p 1/gamma), as Tran
+  do. r1 = the U-fit layer at the jet edge; r2 (second grid cluster, and `KH_outer` in `label_modes`) = the rho-fit
+  layer inside the jet, the barrel shock (so here r2 < r1 is possible).
+- Everything else as the counterflow `single` (inviscid, N 250/300, filters, labels). Output tag `_freeJet`.
 
 | MODE | What it does | Output (in `LSA/<MODE>/`) |
 |---|---|---|
