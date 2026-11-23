@@ -2,9 +2,14 @@
 # Build the free-jet run folders on Gadi (user, 2026-11-23) under /scratch/os85/lp3540/su2/cases/srp_M2.5_freeJet/runs:
 #   SST_p0j6.6_pa101325_freeJet_mesh{Coarse,Medium,Fine}/
 #     0_interp/interp.cfg          (Medium, Fine) the previous mesh's t4_cap3 restart, interpolated by SU2_CFD
-#     2_jet_staged/t1_cap0.5  1000 iterations, CFL 0.1 -> cap 0.5   (coarse: from the uniform ambient, first order for
-#                                  300 iterations, then second order by iteration 800; others: from 0_interp)
-#                  t2_cap1    1000, CFL 0.5 -> cap 1
+#     2_jet_staged/t1_cap0.5_c001  first 1000-iteration chunk of t1, CFL 0.1 -> cap 0.5 (coarse: from the uniform
+#                                  ambient, first order for 300 iterations, then second order by iteration 800; others:
+#                                  from 0_interp)
+#     t1_chunk.cfg                 template for the next t1 chunks (CFL 0.5, cap 0.5, from the chunk before;
+#                                  run_fj_chain.sh fills PREV_CHUNK). t1 runs chunk by chunk until the jet reaches the
+#                                  outlet (axis Ux > 20 m/s at x = 220 mm), then one more chunk (user, 2026-11-23).
+#                                  t1_final -> the last chunk. Iterations per mesh: t1 (n x 1000) + 49,000.
+#                  t2_cap1    1000, CFL 0.5 -> cap 1, from t1_final
 #                  t3_cap3    8000, CFL 1 -> cap 3
 #                  t4_cap3   40000, CFL 1 -> cap 3          (50,000 iterations per mesh)
 #     title.txt
@@ -41,10 +46,12 @@ for m in Coarse Medium Fine; do
        YES $C/runs/${CASE}_mesh${FROM[$m]}/2_jet_staged/t4_cap3/restart "$NORAMP" 1e-8 NO 3.0 1 1 YES
     sol=../../0_interp/restart; rs=YES; ramp=$NORAMP; from="from mesh${FROM[$m]} t4_cap3, interpolated (0_interp)"
   fi
-  mk $R/2_jet_staged/t1_cap0.5/t1_cap0.5.cfg $m "Stage t1_cap0.5: 1000 iterations $from; CFL starts at 0.1, ramps x1.01 to a cap of 0.5, halved on trouble, floor 0.1." \
-     $rs $sol "$ramp" 0.1 YES 0.5 1000 "1000, 1000, 1000" NO
-  mk $R/2_jet_staged/t2_cap1/t2_cap1.cfg $m "Stage t2_cap1: 1000 iterations from t1_cap0.5; CFL 0.5 -> cap 1." \
-     YES ../t1_cap0.5/restart "$NORAMP" 0.5 YES 1.0 1000 "1000, 1000, 1000" NO
+  mk $R/2_jet_staged/t1_cap0.5_c001/t1_cap0.5_c001.cfg $m "Stage t1_cap0.5, chunk 1: 1000 iterations $from; CFL starts at 0.1, ramps x1.01 to a cap of 0.5, halved on trouble, floor 0.1." \
+     $rs $sol "$ramp" 0.1 YES 0.5 1000 "1000, 1000, 1000" YES
+  mk $R/t1_chunk.cfg $m "Stage t1_cap0.5, next chunk: 1000 iterations from PREV_CHUNK; CFL 0.5, cap 0.5, halved on trouble, floor 0.1." \
+     YES ../PREV_CHUNK/restart "$NORAMP" 0.5 YES 0.5 1000 "1000, 1000, 1000" YES
+  mk $R/2_jet_staged/t2_cap1/t2_cap1.cfg $m "Stage t2_cap1: 1000 iterations from the last t1 chunk (t1_final); CFL 0.5 -> cap 1." \
+     YES ../../t1_final/restart "$NORAMP" 0.5 YES 1.0 1000 "1000, 1000, 1000" NO
   mk $R/2_jet_staged/t3_cap3/t3_cap3.cfg $m "Stage t3_cap3: 8000 iterations from t2_cap1; CFL 1 -> cap 3." \
      YES ../t2_cap1/restart "$NORAMP" 1.0 YES 3.0 8000 "1000, 1000, 1000" NO
   mk $R/2_jet_staged/t4_cap3/t4_cap3.cfg $m "Stage t4_cap3: 40000 iterations from t3_cap3; CFL 1 -> cap 3." \

@@ -60,9 +60,11 @@ def col(h, d, name):
     return d[:, h.index(name)] if name in h else np.full(len(d), np.nan)
 
 
-def stage_lines(ax):
-    for o, n in bounds[1:]:
-        ax.axvline(o, color="0.6", lw=0.6, ls=":")
+def stage_lines(ax):   # one line per stage change; the 1000-iteration t1 chunks (t1_cap0.5_c001, ...) count as one stage
+    base = [re.sub(r"_c\d+$", "", n) for o, n in bounds]
+    for i in range(1, len(bounds)):
+        if base[i] != base[i - 1]:
+            ax.axvline(bounds[i][0], color="0.6", lw=0.6, ls=":")
 
 
 # ---- convergence_chain.png ---------------------------------------------------------------------------------------

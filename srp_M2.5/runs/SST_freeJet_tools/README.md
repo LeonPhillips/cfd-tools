@@ -20,7 +20,12 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
 - **Outer boundaries (option A):**
   - `ambient_side` (r = 120 mm) and `ambient_rear` (x = −308.1 mm) are total-condition inlets at p0 = pa,
     T0 = Ta, with flow normal into the domain. They supply the entrained air.
-  - `outlet` (x = 240 mm) is a static-pressure outlet at pa.
+  - `outlet` (x = 240 mm) is a **far-field (Riemann) boundary** at the freestream state: 101,325 Pa, 288.15 K,
+    Mach 0.01 in +x, so flow may cross it either way (user, 2026-11-23). No sponge: the mesh is unchanged.
+    - It was first a static-pressure outlet at pa. That run broke down on the coarse mesh at about cumulative
+      iteration 9,750: the jet's starting vortex ring reached the outlet, the outlet drew flow back in (−140 to
+      −255 m/s at r ≈ 11–17 mm), and t4 aborted at its iteration 109. The old runs are kept in
+      `runs/_old_staticOutlet/`.
 - **Meshes:** each level is a constant sqrt 2 finer than the one before. The fine level is the proposed mesh.
 
   | Mesh | Near field (x 0.5–20, r 0–4.5 mm) | Plume (x 20–100 mm, r 6.5 → 12 mm) |
@@ -28,6 +33,9 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
   | Coarse | 0.035 mm | 0.07 mm |
   | Medium | 0.025 mm | 0.05 mm |
   | Fine | 0.0177 mm | 0.035 mm |
+
+  Built with Gmsh 4.13.1, algorithm 6 (frontal-quad segfaults on coarse and medium): 461,363 / 739,769 /
+  1,320,815 cells.
 
   Every level shares the rest of the mesh:
   - Wall layers: first cell 1.8e-7 m, ratio 1.2, 17 layers. Cells are 0.02 mm at the top of the layers and 0.01 mm
@@ -42,16 +50,24 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
     iterations and ramps to second order by iteration 800.
   - Medium starts from the coarse t4 solution, and fine from the medium t4 solution. Each is interpolated in
     `0_interp` (1 iteration at CFL 1e-8), the method used in the srp_M2.5 grid study.
-- **Stages on every mesh (50,000 iterations):**
+- **Stages on every mesh:**
 
   | Stage | Iterations | CFL |
   |---|---|---|
-  | t1 | 1000 | 0.1 → cap 0.5 |
+  | t1 | 1000-iteration chunks until the jet reaches the outlet, then one more chunk (cap 60 chunks) | 0.1 → cap 0.5 in the first chunk, then 0.5 |
   | t2 | 1000 | 0.5 → cap 1 |
   | t3 | 8000 | 1 → cap 3 |
   | t4 | 40,000 | 1 → cap 3 |
 
-  The CFL halves on trouble, with a floor of 0.1. Nothing stops on convergence: `CONV_RESIDUAL_MINVAL= -20`.
+  - **t1 (user, 2026-11-23):** t1's 1000 iterations count only once the jet has reached the outlet. t1 runs in
+    1000-iteration chunks (`t1_cap0.5_c001`, `_c002`, ...). After each chunk, `jet_arrival.py` reads the axial
+    velocity at x = 220 mm, r = 0.01 mm. Once it is above **20 m/s**, one more chunk runs and t1 ends. On medium and
+    fine the interpolated `0_interp` solution is checked first, so t1 is one chunk if the jet already reaches the
+    outlet. If the jet hasn't arrived after **60 chunks (60,000 iterations)**, the chain stops and is flagged (exit 3);
+    nothing after t1 runs. `t1_final` links to the last chunk, which t2 starts from.
+  - t2, t3 and t4 count their iterations straight away (the jet already reaches the outlet).
+  - Each later chunk restarts SU2 at CFL 0.5. The live monitor takes one snapshot per chunk.
+  - The CFL halves on trouble, with a floor of 0.1. Nothing stops on convergence: `CONV_RESIDUAL_MINVAL= -20`.
 - **Live monitor:** every 1000 iterations, Mach on five lines:
   - r = 0.01, 1.2, 2.4 (the lip) and 4.8 mm, each from x = 1 to 100 mm
   - the shear layer, from (2.0, 2.45) to (40, 5.0) mm
@@ -79,5 +95,6 @@ The chain costs more than 100 SU, so it is submitted only after the user's OK.
 | `exit_plane.py` | pvbatch: area- and mass-averaged exit-plane pressure and Mach, and pe/pa |
 | `plot_fj_mesh.py` | Mesh views and the boundary-marker map |
 | `freejet_template.cfg`, `setup_freejet.sh` | Build the run folders under `cases/srp_M2.5_freeJet/runs/` |
-| `run_fj_chain.sh`, `fj_sr.pbs` | The driver for one mesh (0_interp, then the stages) and its PBS job (`STOP_AFTER` for the test) |
+| `run_fj_chain.sh`, `fj_sr.pbs` | The driver for one mesh (0_interp, the t1 chunks, then t2–t4) and its PBS job (`STOP_AFTER`, `T1_CAP` for tests) |
+| `jet_arrival.py` | pvbatch: axial velocity at x = 220 mm on the axis; decides when t1 ends |
 | `watch_fj_gadi.sh`, `snap_fj.py`, `conv_fj.py`, `plot_fj.py` | The live monitor and the chain figures |
