@@ -115,3 +115,4 @@ The chain costs more than 100 SU, so it is submitted only after the user's OK.
 | `field_fj.py`, `plot_field_fj.py`, `field_fj.pbs` | Field views (whole domain Ux and p, near-jet Mach, streamlines) of chosen t1 chunks |
 | `jet_arrival.py` | pvbatch: axial velocity at x = 220 mm on the axis; decides when t1 ends |
 | `watch_fj_gadi.sh`, `snap_fj.py`, `conv_fj.py`, `plot_fj.py` | The live monitor and the chain figures |
+| `plot_grid_fj.py` | Grid study from the monitor's small files: `python plot_grid_fj.py <prefix> "<title>" Coarse=<t4 folder> Medium=... Fine=...` gives `<prefix>_lines.png/.csv` and `<prefix>_features.png/.csv` |
