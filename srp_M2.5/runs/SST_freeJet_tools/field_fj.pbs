@@ -1,0 +1,20 @@
+#!/bin/bash
+# Field views of several free-jet solutions (field_fj.py + plot_field_fj.py), 2026-11-23.
+#   qsub -v RUN=<run folder>,CHUNKS="006 018 021 024 030 036" field_fj.pbs
+# Writes <run>/field_t1.npz, field_t1_full.png, field_t1_near.png. Cost: normal, 2 cores x 0:20 = at most 1.3 SU.
+#PBS -P os85
+#PBS -q normal
+#PBS -l ncpus=2
+#PBS -l mem=8GB
+#PBS -l walltime=00:20:00
+#PBS -l storage=scratch/os85
+#PBS -l wd
+#PBS -j oe
+set -u
+T=/scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/runs/SST_freeJet_tools
+args=()
+for c in ${CHUNKS:?}; do args+=("c$c=$RUN/2_jet_staged/t1_cap0.5_c$c/flow.vtu"); done
+source /opt/Modules/v4.3.0/init/bash 2>/dev/null
+( module purge; module load paraview/6.1.1-mesa; pvbatch $T/field_fj.py $RUN/field_t1.npz "${args[@]}" ) 2>&1 | grep -vi warning
+source /scratch/os85/lp3540/su2/SU2-v8.5.0/su2_env.sh >/dev/null
+python $T/plot_field_fj.py $RUN/field_t1.npz $RUN/field_t1 "$(cat $RUN/title.txt 2>/dev/null): t1 chunks"
