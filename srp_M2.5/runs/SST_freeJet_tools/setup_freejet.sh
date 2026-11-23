@@ -2,8 +2,12 @@
 # Build the free-jet run folders on Gadi (user, 2026-11-23) under /scratch/os85/lp3540/su2/cases/srp_M2.5_freeJet/runs:
 #   SST_p0j6.6_pa101325_freeJet_mesh{Coarse,Medium,Fine}/
 #     0_interp/interp.cfg          (Medium, Fine) the previous mesh's t4_cap3 restart, interpolated by SU2_CFD
-#     2_jet_staged/t1_cap0.5_c001  first 1000-iteration chunk of t1, CFL 0.1 -> cap 0.5 (coarse: from the uniform
-#                                  ambient, FIRST ORDER (MUSCL_FLOW= NO) in every t1 chunk (user, 2026-11-23) to damp
+#     0_seed/                      (Coarse) base.txt -> SEED_BASE (default $C/seed/base_meshCoarse_restart.dat, a
+#                                  coarse restart with the nozzle running); run_fj_chain.sh writes restart.dat from it
+#                                  with seed_jet.py: a decaying round jet along the axis out to the outlet (user,
+#                                  2026-11-23, option 1)
+#     2_jet_staged/t1_cap0.5_c001  first 1000-iteration chunk of t1, CFL 0.1 -> cap 0.5 (coarse: from 0_seed,
+#                                  FIRST ORDER (MUSCL_FLOW= NO) in every t1 chunk (user, 2026-11-23) to damp
 #                                  the starting vortex; coarse t2 ramps to second order by its iteration 800. Medium,
 #                                  fine: from 0_interp, second order)
 #     t1_chunk.cfg                 template for the next t1 chunks (CFL 0.5, cap 0.5, from the chunk before;
@@ -45,7 +49,11 @@ RAMP2=$(printf '%s' "$RAMP2" | sed ':a;N;$!ba;s/\n/\\n/g')
 for m in Coarse Medium Fine; do
   R=$C/runs/${CASE}_mesh$m
   if [ $m = Coarse ]; then
-    sol=restart; rs=NO; ramp=$NORAMP; t2ramp=$RAMP2; mu1=NO; from="from the uniform ambient (cold start), first order"
+    SEED_BASE=${SEED_BASE:-$C/seed/base_meshCoarse_restart.dat}
+    [ -s $SEED_BASE ] || { echo "missing seed base $SEED_BASE"; exit 1; }
+    mkdir -p $R/0_seed; echo $SEED_BASE > $R/0_seed/base.txt
+    sol=../../0_seed/restart; rs=YES; ramp=$NORAMP; t2ramp=$RAMP2; mu1=NO
+    from="from the seeded jet column (0_seed, seed_jet.py), first order"
   else
     mk $R/0_interp/interp.cfg $m "Interpolation of mesh${FROM[$m]} t4_cap3 (1 iteration at CFL 1e-8; SU2_CFD interpolates the restart itself because its point count differs from the mesh, even number of ranks)" \
        YES $C/runs/${CASE}_mesh${FROM[$m]}/2_jet_staged/t4_cap3/restart "$NORAMP" 1e-8 NO 3.0 1 1 YES

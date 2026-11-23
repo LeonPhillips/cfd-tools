@@ -68,6 +68,14 @@ if [ -d $RUN/0_interp ]; then
   fi
 fi
 
+# ---- 0_seed (coarse): the seeded jet column that t1 starts from ------------------------------------------------------
+if [ -d $RUN/0_seed ] && [ ! -s $RUN/0_seed/restart.dat ]; then
+  echo "0_seed start $(date) from $(cat $RUN/0_seed/base.txt)"
+  python $T/seed_jet.py $(cat $RUN/0_seed/base.txt) $RUN/0_seed/restart.dat > $RUN/0_seed/seed.log 2>&1 \
+    || { cat $RUN/0_seed/seed.log; echo "STEP FAILED: 0_seed. Chain stopped."; rm -f $RUN/0_seed/restart.dat; exit 1; }
+  sed 's/^/  /' $RUN/0_seed/seed.log
+fi
+
 # ---- t1: chunks until the jet reaches the outlet, then one more -------------------------------------------------------
 ka=""   # the chunk after which the jet had arrived (0 = already in the 0_interp solution)
 if [ -d $RUN/0_interp ] && [ -s $RUN/0_interp/flow.vtu ]; then

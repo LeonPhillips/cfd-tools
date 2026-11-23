@@ -48,7 +48,13 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
 - **Solver:** SST (V2003m), axisymmetric. SLAU2 fluxes with MUSCL and the Venkatakrishnan-Wang limiter (coefficient
   0.05). First-order k-ω convection, implicit time stepping.
 - **Start:**
-  - Coarse starts cold, from uniform ambient air with a token Mach 0.01 in +x. **All of coarse t1 is first order**
+  - **Coarse starts from a seeded jet column** (user, 2026-11-23, option 1): `seed_jet.py` keeps the plenum and
+    nozzle flow of a coarse restart (`cases/srp_M2.5_freeJet/seed/base_meshCoarse_restart.dat`, the first-order
+    t1 chunk 25) and replaces everything else with ambient air (Mach 0.01 coflow) plus a self-similar round jet
+    from the nozzle exit to the outlet: Uj 490 m/s, Dj 4.92 mm (fully expanded), centreline Uj·min(1, 60 mm/x'),
+    half-width Dj/2 + 0.094 x', constant total temperature, p = pa, SST k and ω from a Gaussian eddy viscosity.
+    Only the starting field changes. The run's `0_seed/restart.dat` is written by `run_fj_chain.sh`.
+  - Before the seed, coarse started cold from uniform ambient air with a token Mach 0.01 in +x. **All of coarse t1 is first order**
     (`MUSCL_FLOW= NO`, user 2026-11-23), to damp the jet's starting vortex; coarse t2 ramps linearly to second order
     by its iteration 800.
   - **Third try (all far-field, second order after iteration 800):** coarse t1 diverged in chunk 37. From chunk ~18
@@ -102,5 +108,7 @@ The chain costs more than 100 SU, so it is submitted only after the user's OK.
 | `plot_fj_mesh.py` | Mesh views and the boundary-marker map |
 | `freejet_template.cfg`, `setup_freejet.sh` | Build the run folders under `cases/srp_M2.5_freeJet/runs/` |
 | `run_fj_chain.sh`, `fj_sr.pbs` | The driver for one mesh (0_interp, the t1 chunks, then t2–t4) and its PBS job (`STOP_AFTER`, `T1_CAP` for tests) |
+| `seed_jet.py` | The coarse starting field: nozzle flow from a base restart, plus a seeded round jet to the outlet |
+| `field_fj.py`, `plot_field_fj.py`, `field_fj.pbs` | Field views (whole domain Ux and p, near-jet Mach, streamlines) of chosen t1 chunks |
 | `jet_arrival.py` | pvbatch: axial velocity at x = 220 mm on the axis; decides when t1 ends |
 | `watch_fj_gadi.sh`, `snap_fj.py`, `conv_fj.py`, `plot_fj.py` | The live monitor and the chain figures |
