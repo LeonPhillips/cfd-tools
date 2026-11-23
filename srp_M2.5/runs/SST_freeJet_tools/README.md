@@ -17,10 +17,13 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
 - **Geometry:** the v4 model and nozzle walls are unchanged (no-slip, adiabatic). The tunnel boundaries are replaced
   by an open domain: x from −308.1 mm (the v4 rear boundary) to 240 mm (~50 exit diameters), r from 0 to 120 mm
   (~25 exit diameters). The geometry and mesh script is `srp_M2.5/mesh/mesh_freejet.py`.
-- **Outer boundaries (user, 2026-11-23):** `ambient_side` (r = 120 mm), `ambient_rear` (x = −308.1 mm) and
-  `outlet` (x = 240 mm) are all **far-field (Riemann) boundaries** at the freestream state: 101,325 Pa, 288.15 K,
-  Mach 0.01 in +x, TI 1 %, mu_t/mu 1. Flow may cross them either way while the pressure stays at ambient. The mesh
-  is unchanged (no sponge).
+- **Outer boundaries (user, 2026-11-23, with the seeded start):** `ambient_side` (r = 120 mm) and `ambient_rear`
+  (x = −308.1 mm) are **entrainment inlets** at the ambient total state (101,325 Pa, 288.15 K, flow normal into the
+  domain, TI 1 %, mu_t/mu 1); `outlet` (x = 240 mm) is a **static-pressure outlet** at 101,325 Pa. The mesh is
+  unchanged (no sponge).
+  - **Fourth try (all far-field, seeded start):** the jet stayed on the axis, but a recirculation grew in the
+    corner of the outlet and the side (air in through the outlet above the jet, out through the side). Runs in
+    `runs/_old_allFarSeeded/`.
   - **First try:** total-pressure inlets on the side and rear, and a static-pressure outlet. The coarse run broke down
     at about cumulative iteration 9,750: the jet's starting vortex ring reached the outlet, the outlet drew flow back
     in (−140 to −255 m/s at r ≈ 11–17 mm), and t4 aborted at its iteration 109. Runs in `runs/_old_staticOutlet/`.
