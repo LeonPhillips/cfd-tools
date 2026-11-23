@@ -7,16 +7,16 @@
 #     jet_arrival.py checks the axial velocity at x = ARR_X (220 mm), r = 0.01 mm. Once it is above ARR_U (20 m/s),
 #     one more chunk runs and t1 ends (user, 2026-11-23). For medium and fine the 0_interp solution is checked first,
 #     so t1 is a single chunk if the interpolated jet already reaches the outlet. $RUN/t1_final -> the last chunk.
-#     If the jet has not arrived after T1_CAP chunks (60 = 60,000 iterations), the chain stops with exit 3 and is
+#     If the jet has not arrived after T1_CAP chunks (120 = 120,000 iterations), the chain stops with exit 3 and is
 #     flagged (user, 2026-11-23); nothing after t1 runs.
 #   then t2, t3, t4 in <run>/2_jet_staged (sorted) with watch_fj_gadi.sh beside SU2
 #   then plot_fj.py: the chain figures in <run>.
-# Usage: [NP=102] [STOP_AFTER=t1|<stage name>] [T1_CAP=60] bash run_fj_chain.sh <run folder> "<title>"
+# Usage: [NP=102] [STOP_AFTER=t1|<stage name>] [T1_CAP=120] bash run_fj_chain.sh <run folder> "<title>"
 # Log: <run>/chain.log. Restartable: a step counts as done only if its log says "SU2_CFD exit=0" and its history
 # reaches ITER-1. Nothing here stops on convergence; the t1 arrival check only decides when t1 ends.
 T=$(dirname $(readlink -f $0))
 RUN=$(readlink -f ${1:?run folder}); TITLE=${2:-$(basename $RUN)}
-NP=${NP:-102}; STOP_AFTER=${STOP_AFTER:-}; T1_CAP=${T1_CAP:-60}; ARR_X=${ARR_X:-220}; ARR_U=${ARR_U:-20}
+NP=${NP:-102}; STOP_AFTER=${STOP_AFTER:-}; T1_CAP=${T1_CAP:-120}; ARR_X=${ARR_X:-220}; ARR_U=${ARR_U:-20}
 S=$RUN/2_jet_staged
 exec >> $RUN/chain.log 2>&1
 echo "chain start $(date) on $(hostname), job ${PBS_JOBID:-none}, $NP ranks, cfd-tools $(git -C $T rev-parse --short HEAD)"

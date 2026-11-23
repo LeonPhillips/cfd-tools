@@ -3,7 +3,7 @@
 # cores run the watcher / ParaView (user, 2026-11-23).
 #   qsub -N fj_coarse -l walltime=01:00:00 -v RUN=<run folder> fj_sr.pbs
 #   test: qsub -N fj_test -l walltime=00:15:00 -v RUN=<coarse run folder>,STOP_AFTER=t1,T1_CAP=2 fj_sr.pbs
-#   exit 3 = t1 reached T1_CAP chunks (default 60) without the jet reaching the outlet: flagged, chain stopped
+#   exit 3 = t1 reached T1_CAP chunks (default 120) without the jet reaching the outlet: flagged, chain stopped
 #   chain: qsub -W depend=afterok:<previous job> ... for the next mesh (it reads the previous mesh's t4 restart)
 # Cost: 2 SU per core-hour x 104 cores = 208 SU/h; the walltime request caps it.
 #PBS -P os85
@@ -18,7 +18,7 @@ set -u
 T=/scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/runs/SST_freeJet_tools
 TITLE=$(cat ${RUN:?set RUN=<run folder>}/title.txt 2>/dev/null || basename $RUN)
 grep -m1 "model name" /proc/cpuinfo
-NP=102 STOP_AFTER=${STOP_AFTER:-} T1_CAP=${T1_CAP:-60} bash $T/run_fj_chain.sh $RUN "$TITLE"
+NP=102 STOP_AFTER=${STOP_AFTER:-} T1_CAP=${T1_CAP:-120} bash $T/run_fj_chain.sh $RUN "$TITLE"
 rc=$?
 tail -25 $RUN/chain.log
 exit $rc

@@ -17,15 +17,17 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
 - **Geometry:** the v4 model and nozzle walls are unchanged (no-slip, adiabatic). The tunnel boundaries are replaced
   by an open domain: x from −308.1 mm (the v4 rear boundary) to 240 mm (~50 exit diameters), r from 0 to 120 mm
   (~25 exit diameters). The geometry and mesh script is `srp_M2.5/mesh/mesh_freejet.py`.
-- **Outer boundaries (option A):**
-  - `ambient_side` (r = 120 mm) and `ambient_rear` (x = −308.1 mm) are total-condition inlets at p0 = pa,
-    T0 = Ta, with flow normal into the domain. They supply the entrained air.
-  - `outlet` (x = 240 mm) is a **far-field (Riemann) boundary** at the freestream state: 101,325 Pa, 288.15 K,
-    Mach 0.01 in +x, so flow may cross it either way (user, 2026-11-23). No sponge: the mesh is unchanged.
-    - It was first a static-pressure outlet at pa. That run broke down on the coarse mesh at about cumulative
-      iteration 9,750: the jet's starting vortex ring reached the outlet, the outlet drew flow back in (−140 to
-      −255 m/s at r ≈ 11–17 mm), and t4 aborted at its iteration 109. The old runs are kept in
-      `runs/_old_staticOutlet/`.
+- **Outer boundaries (user, 2026-11-23):** `ambient_side` (r = 120 mm), `ambient_rear` (x = −308.1 mm) and
+  `outlet` (x = 240 mm) are all **far-field (Riemann) boundaries** at the freestream state: 101,325 Pa, 288.15 K,
+  Mach 0.01 in +x, TI 1 %, mu_t/mu 1. Flow may cross them either way while the pressure stays at ambient. The mesh
+  is unchanged (no sponge).
+  - **First try:** total-pressure inlets on the side and rear, and a static-pressure outlet. The coarse run broke down
+    at about cumulative iteration 9,750: the jet's starting vortex ring reached the outlet, the outlet drew flow back
+    in (−140 to −255 m/s at r ≈ 11–17 mm), and t4 aborted at its iteration 109. Runs in `runs/_old_staticOutlet/`.
+  - **Second try:** the same inlets with a far-field outlet. Coarse t1 diverged in chunk 33 (cumulative 32,884). Flow
+    left through the side total-pressure inlet and the domain pressure rose above ambient (102.6 kPa near the
+    outlet). The jet flared outward with reversed flow on the axis at x ≈ 100–200 mm, then blew up at the outlet.
+    Runs in `runs/_old_farOutletOnly/`.
 - **Meshes:** each level is a constant sqrt 2 finer than the one before. The fine level is the proposed mesh.
 
   | Mesh | Near field (x 0.5–20, r 0–4.5 mm) | Plume (x 20–100 mm, r 6.5 → 12 mm) |
@@ -54,7 +56,7 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
 
   | Stage | Iterations | CFL |
   |---|---|---|
-  | t1 | 1000-iteration chunks until the jet reaches the outlet, then one more chunk (cap 60 chunks) | 0.1 → cap 0.5 in the first chunk, then 0.5 |
+  | t1 | 1000-iteration chunks until the jet reaches the outlet, then one more chunk (cap 120 chunks) | 0.1 → cap 0.5 in the first chunk, then 0.5 |
   | t2 | 1000 | 0.5 → cap 1 |
   | t3 | 8000 | 1 → cap 3 |
   | t4 | 40,000 | 1 → cap 3 |
@@ -63,7 +65,7 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
     1000-iteration chunks (`t1_cap0.5_c001`, `_c002`, ...). After each chunk, `jet_arrival.py` reads the axial
     velocity at x = 220 mm, r = 0.01 mm. Once it is above **20 m/s**, one more chunk runs and t1 ends. On medium and
     fine the interpolated `0_interp` solution is checked first, so t1 is one chunk if the jet already reaches the
-    outlet. If the jet hasn't arrived after **60 chunks (60,000 iterations)**, the chain stops and is flagged (exit 3);
+    outlet. If the jet hasn't arrived after **120 chunks (120,000 iterations)**, the chain stops and is flagged (exit 3);
     nothing after t1 runs. `t1_final` links to the last chunk, which t2 starts from.
   - t2, t3 and t4 count their iterations straight away (the jet already reaches the outlet).
   - Each later chunk restarts SU2 at CFL 0.5. The live monitor takes one snapshot per chunk.
