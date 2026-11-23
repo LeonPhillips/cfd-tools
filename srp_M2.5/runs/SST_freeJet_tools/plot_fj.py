@@ -56,6 +56,7 @@ if not H:
 
 
 def col(h, d, name):
+    name = {"AvgCFL": "Avg CFL"}.get(name, name) if name not in h else name   # SU2 v8 writes "Avg CFL"
     return d[:, h.index(name)] if name in h else np.full(len(d), np.nan)
 
 
