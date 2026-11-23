@@ -23,14 +23,14 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
   unchanged (no sponge).
   - **Fourth try (all far-field, seeded start):** the jet stayed on the axis, but a recirculation grew in the
     corner of the outlet and the side (air in through the outlet above the jet, out through the side). Runs in
-    `runs/_old_allFarSeeded/`.
+    `runs/_old_allFarSeeded/` (deleted 2026-11-24).
   - **First try:** total-pressure inlets on the side and rear, and a static-pressure outlet. The coarse run broke down
     at about cumulative iteration 9,750: the jet's starting vortex ring reached the outlet, the outlet drew flow back
-    in (−140 to −255 m/s at r ≈ 11–17 mm), and t4 aborted at its iteration 109. Runs in `runs/_old_staticOutlet/`.
+    in (−140 to −255 m/s at r ≈ 11–17 mm), and t4 aborted at its iteration 109. Runs in `runs/_old_staticOutlet/` (deleted 2026-11-24).
   - **Second try:** the same inlets with a far-field outlet. Coarse t1 diverged in chunk 33 (cumulative 32,884). Flow
     left through the side total-pressure inlet and the domain pressure rose above ambient (102.6 kPa near the
     outlet). The jet flared outward with reversed flow on the axis at x ≈ 100–200 mm, then blew up at the outlet.
-    Runs in `runs/_old_farOutletOnly/`.
+    Runs in `runs/_old_farOutletOnly/` (deleted 2026-11-24).
 - **Meshes:** each level is a constant sqrt 2 finer than the one before. The fine level is the proposed mesh.
 
   | Mesh | Near field (x 0.5–20, r 0–4.5 mm) | Plume (x 20–100 mm, r 6.5 → 12 mm) |
@@ -62,7 +62,7 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
     by its iteration 800.
   - **Third try (all far-field, second order after iteration 800):** coarse t1 diverged in chunk 37. From chunk ~18
     the jet left the axis as a hollow cone around reversed flow on the axis, the cone reached the side boundary, and
-    2 kg/s/rad left through the side. Runs in `runs/_old_allFar2ndOrder/`; field views from `field_fj.pbs`.
+    2 kg/s/rad left through the side. Runs in `runs/_old_allFar2ndOrder/` (deleted 2026-11-24); field views from `field_fj.pbs`.
   - Medium starts from the coarse t4 solution, and fine from the medium t4 solution. Each is interpolated in
     `0_interp` (1 iteration at CFL 1e-8), the method used in the srp_M2.5 grid study.
 - **Stages on every mesh:**
