@@ -48,8 +48,12 @@ coarse to fine. Each mesh starts from the previous mesh's final solution, interp
 - **Solver:** SST (V2003m), axisymmetric. SLAU2 fluxes with MUSCL and the Venkatakrishnan-Wang limiter (coefficient
   0.05). First-order k-ω convection, implicit time stepping.
 - **Start:**
-  - Coarse starts cold, from uniform ambient air with a token Mach 0.01 in +x. It runs first order for 300
-    iterations and ramps to second order by iteration 800.
+  - Coarse starts cold, from uniform ambient air with a token Mach 0.01 in +x. **All of coarse t1 is first order**
+    (`MUSCL_FLOW= NO`, user 2026-11-23), to damp the jet's starting vortex; coarse t2 ramps linearly to second order
+    by its iteration 800.
+  - **Third try (all far-field, second order after iteration 800):** coarse t1 diverged in chunk 37. From chunk ~18
+    the jet left the axis as a hollow cone around reversed flow on the axis, the cone reached the side boundary, and
+    2 kg/s/rad left through the side. Runs in `runs/_old_allFar2ndOrder/`; field views from `field_fj.pbs`.
   - Medium starts from the coarse t4 solution, and fine from the medium t4 solution. Each is interpolated in
     `0_interp` (1 iteration at CFL 1e-8), the method used in the srp_M2.5 grid study.
 - **Stages on every mesh:**

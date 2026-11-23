@@ -3,8 +3,9 @@
 #   SST_p0j6.6_pa101325_freeJet_mesh{Coarse,Medium,Fine}/
 #     0_interp/interp.cfg          (Medium, Fine) the previous mesh's t4_cap3 restart, interpolated by SU2_CFD
 #     2_jet_staged/t1_cap0.5_c001  first 1000-iteration chunk of t1, CFL 0.1 -> cap 0.5 (coarse: from the uniform
-#                                  ambient, first order for 300 iterations, then second order by iteration 800; others:
-#                                  from 0_interp)
+#                                  ambient, FIRST ORDER (MUSCL_FLOW= NO) in every t1 chunk (user, 2026-11-23) to damp
+#                                  the starting vortex; coarse t2 ramps to second order by its iteration 800. Medium,
+#                                  fine: from 0_interp, second order)
 #     t1_chunk.cfg                 template for the next t1 chunks (CFL 0.5, cap 0.5, from the chunk before;
 #                                  run_fj_chain.sh fills PREV_CHUNK). t1 runs chunk by chunk until the jet reaches the
 #                                  outlet (axis Ux > 20 m/s at x = 220 mm), then one more chunk (user, 2026-11-23).
@@ -29,7 +30,7 @@ mk() {  # mk <out cfg> <mesh> <stage note> <restart> <solution> <muscl ramp> <cf
   sed -e "s|@CASE@|$CASE|" -e "s|@MESH@|$2|" -e "s|@STAGE_NOTE@|$3|" -e "s|@COMMIT@|$COMMIT|" \
       -e "s|@RESTART@|$4|" -e "s|@SOLUTION@|$5|" -e "s|@MUSCL_RAMP@|$6|" -e "s|@CFL0@|$7|" -e "s|@CFL_ADAPT@|$8|" \
       -e "s|@CAP@|$9|" -e "s|@ITER@|${10}|" -e "s|@WRT@|${11}|" -e "s|@OVERWRITE@|${12}|" \
-      -e "s|@MESHFILE@|$C/mesh/srp_M2.5_freeJet_mesh$2.su2|" $T/freejet_template.cfg > $1
+      -e "s|@MUSCL@|${MUSCL:-YES}|" -e "s|@MESHFILE@|$C/mesh/srp_M2.5_freeJet_mesh$2.su2|" $T/freejet_template.cfg > $1
   ! grep -n "@[A-Z_0-9]*@" $1 || { echo "unfilled placeholder in $1"; exit 1; }
 }
 NORAMP='RAMP_MUSCL= NO   % fully second order'
@@ -37,21 +38,25 @@ RAMP='RAMP_MUSCL= YES   % cold start: first order for 300 iterations, then a lin
 RAMP_MUSCL_COEFF= ( 300, 10, 500 )
 KIND_MUSCL_RAMP= ITERATION'
 RAMP=$(printf '%s' "$RAMP" | sed ':a;N;$!ba;s/\n/\\n/g')
+RAMP2='RAMP_MUSCL= YES   % coarse t2: linear ramp from the first-order t1 to second order by iteration 800
+RAMP_MUSCL_COEFF= ( 0, 10, 800 )
+KIND_MUSCL_RAMP= ITERATION'
+RAMP2=$(printf '%s' "$RAMP2" | sed ':a;N;$!ba;s/\n/\\n/g')
 for m in Coarse Medium Fine; do
   R=$C/runs/${CASE}_mesh$m
   if [ $m = Coarse ]; then
-    sol=restart; rs=NO; ramp=$RAMP; from="from the uniform ambient (cold start)"
+    sol=restart; rs=NO; ramp=$NORAMP; t2ramp=$RAMP2; mu1=NO; from="from the uniform ambient (cold start), first order"
   else
     mk $R/0_interp/interp.cfg $m "Interpolation of mesh${FROM[$m]} t4_cap3 (1 iteration at CFL 1e-8; SU2_CFD interpolates the restart itself because its point count differs from the mesh, even number of ranks)" \
        YES $C/runs/${CASE}_mesh${FROM[$m]}/2_jet_staged/t4_cap3/restart "$NORAMP" 1e-8 NO 3.0 1 1 YES
-    sol=../../0_interp/restart; rs=YES; ramp=$NORAMP; from="from mesh${FROM[$m]} t4_cap3, interpolated (0_interp)"
+    sol=../../0_interp/restart; rs=YES; ramp=$NORAMP; t2ramp=$NORAMP; mu1=YES; from="from mesh${FROM[$m]} t4_cap3, interpolated (0_interp)"
   fi
-  mk $R/2_jet_staged/t1_cap0.5_c001/t1_cap0.5_c001.cfg $m "Stage t1_cap0.5, chunk 1: 1000 iterations $from; CFL starts at 0.1, ramps x1.01 to a cap of 0.5, halved on trouble, floor 0.1." \
+  MUSCL=$mu1 mk $R/2_jet_staged/t1_cap0.5_c001/t1_cap0.5_c001.cfg $m "Stage t1_cap0.5, chunk 1: 1000 iterations $from; CFL starts at 0.1, ramps x1.01 to a cap of 0.5, halved on trouble, floor 0.1." \
      $rs $sol "$ramp" 0.1 YES 0.5 1000 "1000, 1000, 1000" YES
-  mk $R/t1_chunk.cfg $m "Stage t1_cap0.5, next chunk: 1000 iterations from PREV_CHUNK; CFL 0.5, cap 0.5, halved on trouble, floor 0.1." \
+  MUSCL=$mu1 mk $R/t1_chunk.cfg $m "Stage t1_cap0.5, next chunk: 1000 iterations from PREV_CHUNK; CFL 0.5, cap 0.5, halved on trouble, floor 0.1; MUSCL_FLOW $mu1." \
      YES ../PREV_CHUNK/restart "$NORAMP" 0.5 YES 0.5 1000 "1000, 1000, 1000" YES
   mk $R/2_jet_staged/t2_cap1/t2_cap1.cfg $m "Stage t2_cap1: 1000 iterations from the last t1 chunk (t1_final); CFL 0.5 -> cap 1." \
-     YES ../../t1_final/restart "$NORAMP" 0.5 YES 1.0 1000 "1000, 1000, 1000" NO
+     YES ../../t1_final/restart "$t2ramp" 0.5 YES 1.0 1000 "1000, 1000, 1000" NO
   mk $R/2_jet_staged/t3_cap3/t3_cap3.cfg $m "Stage t3_cap3: 8000 iterations from t2_cap1; CFL 1 -> cap 3." \
      YES ../t2_cap1/restart "$NORAMP" 1.0 YES 3.0 8000 "1000, 1000, 1000" NO
   mk $R/2_jet_staged/t4_cap3/t4_cap3.cfg $m "Stage t4_cap3: 40000 iterations from t3_cap3; CFL 1 -> cap 3." \
