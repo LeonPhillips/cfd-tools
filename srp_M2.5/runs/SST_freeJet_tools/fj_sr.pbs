@@ -1,0 +1,23 @@
+#!/bin/bash
+# One free-jet mesh's chain on ONE normalsr node (Sapphire Rapids, 104 cores, 500 GB): 102 SU2 ranks, the other two
+# cores run the watcher / ParaView (user, 2026-11-23).
+#   qsub -N fj_coarse -l walltime=01:00:00 -v RUN=<run folder> fj_sr.pbs
+#   test: qsub -N fj_test -l walltime=00:15:00 -v RUN=<coarse run folder>,STOP_AFTER=t2_cap1 fj_sr.pbs
+#   chain: qsub -W depend=afterok:<previous job> ... for the next mesh (it reads the previous mesh's t4 restart)
+# Cost: 2 SU per core-hour x 104 cores = 208 SU/h; the walltime request caps it.
+#PBS -P os85
+#PBS -q normalsr
+#PBS -l ncpus=104
+#PBS -l mem=500GB
+#PBS -l walltime=02:00:00
+#PBS -l storage=scratch/os85
+#PBS -l wd
+#PBS -j oe
+set -u
+T=/scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/runs/SST_freeJet_tools
+TITLE=$(cat ${RUN:?set RUN=<run folder>}/title.txt 2>/dev/null || basename $RUN)
+grep -m1 "model name" /proc/cpuinfo
+NP=102 STOP_AFTER=${STOP_AFTER:-} bash $T/run_fj_chain.sh $RUN "$TITLE"
+rc=$?
+tail -25 $RUN/chain.log
+exit $rc

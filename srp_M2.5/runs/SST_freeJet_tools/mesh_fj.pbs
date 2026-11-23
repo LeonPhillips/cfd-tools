@@ -1,0 +1,43 @@
+#!/bin/bash
+# Free-jet preparation job (user, 2026-11-23), one small normal-queue job:
+#   1. exit_plane.py on the 6.6 bar AUSM+UP2 meshFine t3 solution: area- and mass-averaged exit pressure, pe/pa at 1 atm
+#   2. the three free-jet meshes (Gmsh 4.13.1 Python API), sqrt 2 apart:
+#        coarse 0.035 / 0.07 mm, medium 0.025 / 0.05 mm, fine 0.0177 / 0.035 mm (near field / plume)
+#      each with its log, mesh views + marker map (plot_fj_mesh.py)
+# Output: /scratch/os85/lp3540/su2/cases/srp_M2.5_freeJet/{exit_plane.txt, mesh/}
+#   qsub mesh_fj.pbs        Cost: normal queue 2 SU per core-hour, 4 cores, 1:30 -> at most 12 SU.
+#PBS -P os85
+#PBS -q normal
+#PBS -l ncpus=4
+#PBS -l mem=32GB
+#PBS -l walltime=01:30:00
+#PBS -l storage=scratch/os85
+#PBS -l wd
+#PBS -j oe
+T=/scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/runs/SST_freeJet_tools
+MESHPY=/scratch/os85/lp3540/su2/cfd-tools/srp_M2.5/mesh/mesh_freejet.py
+C=/scratch/os85/lp3540/su2/cases/srp_M2.5_freeJet
+STEP=/scratch/os85/lp3540/su2/cases/srp_M2.5/geometry/su2_shortDiff_wFillet_v4.STEP
+SRC=/scratch/os85/lp3540/su2/cases/srp_M2.5/runs/SST_p0j6.6_p0inf3.247_meshFine/2_jet_staged/t3_cap3/flow.vtu
+mkdir -p $C/mesh
+echo "cfd-tools $(git -C $T rev-parse --short HEAD), $(date), $(hostname)"
+# 1. exit plane (ParaView 6.1 in a clean subshell)
+( module purge; module load paraview/6.1.1-mesa; pvbatch $T/exit_plane.py $SRC 1.876 2.389 101325 ) 2>&1 | grep -vi warning | tee $C/exit_plane.txt
+# 2. meshes
+source /scratch/os85/lp3540/su2/SU2-v8.5.0/su2_env.sh
+module load gmsh/4.13.1
+export PYTHONPATH=/apps/gmsh/4.13.1/lib64:$PYTHONPATH
+cd $C/mesh
+for spec in "Coarse 0.035 0.07" "Medium 0.025 0.05" "Fine 0.0177 0.035"; do
+  set -- $spec; M=srp_M2.5_freeJet_mesh$1
+  for hn in $2 $( [ $1 = Fine ] && echo 0.0176 0.0178 ); do
+    t0=$(date +%s)
+    H_NEAR=$hn H_PLUME=$3 python $MESHPY $STEP $M.su2 > ${M}_mesh.log 2>&1; rc=$?
+    echo "$1: near $hn plume $3 mm: exit=$rc, $(( $(date +%s) - t0 )) s"
+    [ $rc -eq 0 ] && break
+  done
+  grep -e "^free jet" -e "curves" -e "2D elements" -e "nodes:" -e minSICN -e "^BL:" -e Error ${M}_mesh.log
+  python $T/plot_fj_mesh.py $M.msh ${M}_boundaries.vtk ${M}_views.png
+done
+ls -lh $C/mesh
+echo MESH_JOB_DONE $(date)
