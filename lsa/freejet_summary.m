@@ -57,7 +57,8 @@ for im = 1:nm
     for c = 1:2
         if c == 1, X = F; lab = 'free jet, St_j 0.405'; else, X = G; lab = 'counterflow, St_D 1.271'; end
         s = X.out.sol{1, im}; Pp = X.prof(1); [a, j] = pick(s, Pp.r1);
-        k = find(s.Vidx == j); n = numel(s.r); v = s.V(:, k);
+        if isfield(s, 'Vidx'), k = find(s.Vidx == j); else, k = j; end   % older files keep every vector
+        n = numel(s.r); v = s.V(:, k);
         u = abs(v(n+1:2*n)); p = abs(v(4*n+1:5*n));
         subplot(2, 2, im); hold on; plot(s.r*4.6, u/max(u), 'LineWidth', 1.2, 'DisplayName', sprintf('%s: \\alpha = %.2f%+.2fi', lab, real(a), imag(a)));
         subplot(2, 2, 2 + im); hold on; plot(s.r*4.6, p/max(p), 'LineWidth', 1.2, 'DisplayName', lab);
