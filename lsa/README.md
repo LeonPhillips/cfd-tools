@@ -98,6 +98,30 @@ Opened by LSA Viewer v1.0.
 Every mode except `selfcheck` and `thickness` also writes `lsa_profiles.png` (raw and smoothed profiles); all write
 `lsa_local.log`. Optional `OUT_SUBDIR` names the output folder under `OUT_DIR` (default: the mode name).
 
+### MODE='michalke' (analytic base flow, user 2026-11-24)
+
+Michalke (1971, Z. Flugwiss. 19; NASA TM 75190) base flow, with **no RANS input**:
+- velocity: profile 2 (eq. 2.8), U/U1 = ½{1 + tanh[b(R/r − r/R)]}, U(R) = U1/2;
+- temperature: Crocco–Busemann (eq. 2.5), T/T1 = T* + (1 − T*)y + ½(γ−1)M²y(1 − y), with T* = T0/T1 and M = U1/a1;
+- uniform pressure, so ρ ∝ 1/T (eq. 2.2);
+- b from R/θ, with θ the density-weighted momentum thickness (eq. 2.6; `MK_THETA_DEF='vel'` for the velocity θ),
+  solved numerically (eq. 2.11's closed form holds only for T* = 1).
+
+`MK_PART='validate'` runs a unit jet (T* = 1, R/θ = `MK_VAL_RTHETA`, default 6.25; M = `MK_VAL_M`, default 0.05, 0.4,
+0.8 and 1.2, with M = 0 run as 0.05 because velocities are scaled by a sound speed) against the peak −α_iθ read
+from Michalke's Figs 10–11 (library note); it passes if every peak is within 0.003. It also prints the solved b
+against eq. 2.11.
+
+`MK_PART='freejet'` (with `CASE='freejet'`) is the ideally expanded free jet (confirmed, user 2026-11-24): U1 = U_j
+(489.9 m/s), M = M_j = 1.882, T* = 1 + 0.2M_j² = 1.708 (unheated), R = D_j/2 = 2.476 mm, p = p_amb, one St_j scan
+(the free-jet list) per R/θ in `MK_RTHETA` (default 6.25, 12.5, 25 and 50). There is no x: the flow is parallel.
+The KH pick is the most unstable converged `KH_jet` mode with α_r > 0 and c < 1.5 U1 (drops Michalke's long-wave
+"mode II"). Writes one Viewer file per R/θ, `michalke_freeJet_KH_vs_Stj.{csv,png}` (with the two-tanh RANS-fit KH at
+x = 3 and 4 mm overlaid, for reference only) and `michalke_freeJet_profiles.png`.
+
+    matlab -batch "MODE='michalke'; MK_PART='validate'; OUT_SUBDIR='michalke_check'; NWORKERS=20; lsa_local"
+    matlab -batch "MODE='michalke'; MK_PART='freejet'; CASE='freejet'; OUT_SUBDIR='single_freeJet_michalke'; NWORKERS=20; lsa_local"
+
 ### MODE='thickness' (test T1)
 
 Builds each base flow as a `P` struct in the `radial_profile` format, from Tran two-tanh fits (the same as

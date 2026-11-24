@@ -48,6 +48,8 @@
 %          'profiles'    : all stations, base-flow profiles and fits only (no eigenvalues): check the tanh fits
 %          'thickness'   : test T1 (2026-11-17): KH u-hat against jet-layer thickness on analytic two-tanh base
 %                          flows built from the x = 3 mm single-run fits (see run_thickness and README.md)
+%          'michalke'    : Michalke (1971) analytic profile 2 + Crocco-Busemann, no RANS (2026-11-24; MK_PART
+%                          'validate' against his Figs 10-11, or 'freejet' with CASE='freejet'; see run_michalke)
 %   Optional workspace variables: BASEFLOW_DIR, OUT_DIR (default to the M3 paths below), NWORKERS,
 %   PROFILE ('tanh', the default: Tran's fitted profiles; or 'smooth': the smoothed RANS profile),
 %   SINGLE_X [mm] and SINGLE_ST (station and St_D of MODE='single'; defaults 3.0 and 1.271; a vector of St = an
@@ -215,6 +217,23 @@ if exist('THICK_VIEWER', 'var'), S.thick_viewer = THICK_VIEWER; else, S.thick_vi
 S.thick_dbl = 0.25;                                    % "visible double peak": 2nd peak >= this x max (own choice)
 if exist('FIG_DIR', 'var'), S.fig_dir = FIG_DIR; else, S.fig_dir = ''; end   % '' = the output folder
 
+% --- 'michalke' mode (user, 2026-11-24): Michalke (1971, Z. Flugwiss. 19; NASA TM 75190) analytic base flow, NO RANS
+%     input. Profile 2 (eq. 2.8) U/U1 = 0.5(1 + tanh[b(R/r - r/R)]), Crocco-Busemann temperature (eq. 2.5), uniform
+%     pressure, rho ~ 1/T (eq. 2.2); b from R/theta through the density-weighted momentum thickness (eq. 2.6), solved
+%     numerically (eq. 2.11's closed form holds only for T* = 1).
+%   MK_PART = 'validate': unit jet, T* = 1, R/theta = MK_VAL_RTHETA, M = MK_VAL_M, against Michalke Figs 10-11
+%             (M = 0 is run as M = 0.05: the code scales velocity by a sound speed, so U1 = 0 is not possible)
+%   MK_PART = 'freejet' (needs CASE='freejet'): the ideally expanded free jet, U1 = U_j, M = M_j, T* = 1 + 0.2 M_j^2,
+%             R = D_j/2, p = p_amb, one St_j scan per R/theta in MK_RTHETA
+if exist('MK_PART', 'var'), S.mk_part = MK_PART; else, S.mk_part = 'validate'; end
+if exist('MK_RTHETA', 'var'), S.mk_Rtheta = MK_RTHETA; else, S.mk_Rtheta = [6.25 12.5 25 50]; end
+if exist('MK_THETA_DEF', 'var'), S.mk_theta_def = MK_THETA_DEF; else, S.mk_theta_def = 'rho'; end   % 'rho' or 'vel'
+if exist('MK_VAL_M', 'var'), S.mk_val_M = MK_VAL_M; else, S.mk_val_M = [0.05 0.4 0.8 1.2]; end
+if exist('MK_VAL_RTHETA', 'var'), S.mk_val_Rtheta = MK_VAL_RTHETA; else, S.mk_val_Rtheta = 6.25; end
+S.mk_val_bt = 0.0125:0.0125:0.40;                       % validation frequencies beta*theta/U1
+S.mk_cmax = 1.35;                                       % KH pick: phase speed below this x U1 (drops mode II, c ~ 1.45 U1
+                                                        % at low beta; Michalke's KH overshoot is at most 1.30 U1, R/theta 100)
+
 % --- parallel workers (0 = serial)
 if exist('NWORKERS', 'var'), S.nworkers = NWORKERS; else, S.nworkers = 0; end
 
@@ -236,6 +255,11 @@ end
 % Test T1 (MODE='thickness'): analytic base flows only, so the RANS base flow is not loaded either.
 if strcmp(S.mode, 'thickness')
     run_thickness(S);
+    diary off; return;
+end
+% MODE='michalke': Michalke (1971) analytic base flow, no RANS data at all (see run_michalke)
+if strcmp(S.mode, 'michalke')
+    run_michalke(S);
     diary off; return;
 end
 
@@ -897,6 +921,204 @@ function a = vortex_sheet_root(a, om, m, Uj, nuj, R0)
         a = a + da;
         if abs(da) < 1e-12*max(1, abs(a)), break; end
     end
+end
+
+% ---------------------------------------------------------------------------- Michalke (1971) analytic base flow -----
+function [P, info] = michalke_base(R, Rtheta, M, Tstar, theta_def, rmax, gam)
+% Michalke 1971 profile 2 (eq. 2.8) with Crocco-Busemann temperature (eq. 2.5) and uniform pressure, in code units:
+% lengths as given (R, rmax), velocity by the AMBIENT sound speed a0, nu = rho0/rho, p = 1/gam (ambient).
+%   y = U/U1 = 0.5(1 + tanh[b(R/r - r/R)]),  T/T1 = T* + (1 - T*)y + (gam-1)/2 M^2 y(1 - y),  T* = T0/T1
+%   U1/a0 = M a1/a0 = M/sqrt(T*),  nu = rho0/rho = T/T0 = (T/T1)/T*  (p uniform and equal to ambient)
+% b is solved so that R/theta = Rtheta, theta density weighted (eq. 2.6: int rho/rho1 y(1-y) dr, rho/rho1 = T1/T)
+% or, with theta_def = 'vel', the plain velocity momentum thickness int y(1-y) dr.
+    r = linspace(0, rmax, 40001)';
+    Trel = @(y) Tstar + (1 - Tstar)*y + (gam - 1)/2*M^2*y.*(1 - y);          % T/T1
+    yof  = @(b) 0.5*(1 + tanh(b*([Inf; R./r(2:end)] - r/R)));               % r = 0: tanh -> 1
+    if strcmp(theta_def, 'vel'), w = @(y) 1; else, w = @(y) 1./Trel(y); end
+    thof = @(b) trapz(r, w(yof(b)).*yof(b).*(1 - yof(b)));
+    lb = fzero(@(lb) thof(exp(lb)) - R/Rtheta, [log(0.02) log(5000)]);      % theta falls monotonically with b
+    b = exp(lb); y = yof(b);
+    dy = 0.5*(1 - tanh(b*([Inf; R./r(2:end)] - r/R)).^2) .* b .* ([0; -R./r(2:end).^2] - 1/R);
+    dy(1) = 0;
+    U1 = M/sqrt(Tstar);
+    nu  = Trel(y)/Tstar;
+    dnu = ((1 - Tstar) + (gam - 1)/2*M^2*(1 - 2*y)).*dy/Tstar;
+    P = struct('x_mm', 0, 'r', r, 'U', U1*y, 'nu', nu, 'p', ones(size(r))/gam, 'dU', U1*dy, 'dnu', dnu, ...
+               'dp', zeros(size(r)), 'r1', R, 'r2', 3*R, 'r_bs', NaN, 'rmax', rmax);
+    P.U_raw = P.U; P.nu_raw = P.nu; P.p_raw = P.p;      % "raw" = the analytic profile itself (plot_profiles)
+    fM = 0.5*integral(@(yy) 1./Trel(yy), 0, 1);         % Michalke's boundary-layer function f(M, T*) (eq. 2.10)
+    info = struct('b', b, 'U1', U1, 'R', R, 'Rtheta', Rtheta, 'theta', R/Rtheta, ...
+                  'theta_rho', trapz(r, y.*(1 - y)./Trel(y)), 'theta_vel', trapz(r, y.*(1 - y)), ...
+                  'f', fM, 'b_eq211', 0.5*fM*Rtheta);   % eq. 2.11 (valid only for T* = 1, theta density weighted)
+end
+
+function Sx = michalke_numerics(S, info, L)
+% Grid and labelling settings for one analytic profile. L = length unit in mm (D_ref*1e3).
+    d_mm = info.R/info.b*L;                             % about the full width of the tanh layer [mm]
+    Sx = S;
+    Sx.clu_amp = [30 0]; Sx.clu_wid_mm = [max(d_mm, 0.02*info.R*L), 1];   % one cluster, at r = R
+    Sx.sl_window_mm = max(d_mm, 0.1*info.R*L);          % KH |u| peak within one layer width of r = R (the RANS
+                                                        % 0.6 mm window would let in the axis-peaked mode II)
+end
+
+function [a, j] = michalke_pickKH(sol, U1, cmax)
+% most unstable converged KH_jet mode with alpha_r > 0 and phase speed < cmax*U1 (drops the long-wave mode II)
+    i = find(sol.conv & strcmp(sol.label, 'KH_jet') & real(sol.alpha) > 0 & sol.omega./real(sol.alpha) < cmax*U1);
+    if isempty(i), a = NaN; j = NaN; return; end
+    [~, k] = min(imag(sol.alpha(i))); j = i(k); a = sol.alpha(j);
+end
+
+function run_michalke(S)
+% Michalke (1971) base flow, no RANS input (user, 2026-11-24). See the 'michalke' settings in section 1.
+    gam = S.gamma;
+    switch S.mk_part
+    case 'validate'
+        % unit jet: D = 1 (R = 0.5), D_ref = 1 mm so the mm-based grid settings are in units of D; T* = 1
+        Sx0 = S; Sx0.D_ref = 1e-3; Sx0.alpha_r_add = 20; Sx0.alpha_i_max = 50; Sx0.conv_floor = 1;
+        R0 = 0.5; rmax = 10; Rt = S.mk_val_Rtheta; Ms = S.mk_val_M; ms = S.m; bt = S.mk_val_bt;
+        [Ti, Tm, Tb] = ndgrid(1:numel(Ms), 1:numel(ms), 1:numel(bt)); nT = numel(Ti);
+        res = nan(nT, 1) + 1i*nan(nT, 1);
+        if S.nworkers > 0 && isempty(gcp('nocreate')), parpool(S.nworkers); end
+        parfor (k = 1:nT, S.nworkers)
+            [P, info] = michalke_base(R0, Rt, Ms(Ti(k)), 1, S.mk_theta_def, rmax, gam);
+            Sx = michalke_numerics(Sx0, info, 1);
+            om = bt(Tb(k))*info.U1/info.theta;          % beta*theta/U1 -> omega in a0/D units
+            sol = solve_case(P, ms(Tm(k)), om, S.N, Sx, false);
+            chk = solve_case(P, ms(Tm(k)), om, S.N_check, Sx, -1);
+            sol = label_modes(mark_converged(sol, chk, Sx), P, Sx);
+            res(k) = michalke_pickKH(sol, info.U1, S.mk_cmax);
+        end
+        th = R0/Rt;
+        col = @(v) reshape(v, [], 1);
+        T = table(col(Ms(Ti(:))), col(ms(Tm(:))), col(bt(Tb(:))), real(res)*th, imag(res)*th, ...
+                  'VariableNames', {'M', 'm', 'bt', 'ar_theta', 'ai_theta'});
+        T.c_over_U1 = T.bt ./ T.ar_theta;
+        writetable(T, fullfile(S.out_dir, sprintf('michalke_validate_Rtheta%g.csv', Rt)));
+        % Michalke Figs 10-11 (profile 2, R/theta 6.25, T* = 1), read from the figures (library note, +-0.003)
+        ref = struct('m0', [0.060 0.055 0.043 0.025], 'm1', [0.061 0.058 0.051 0.042], 'M', [0 0.4 0.8 1.2]);
+        fprintf('\nMichalke check, profile 2, R/theta = %g, T* = 1, theta %s-weighted\n', Rt, S.mk_theta_def);
+        fprintf('%5s %2s %10s %8s %10s %10s %8s\n', 'M', 'm', 'peak', 'at bt', 'neutral', 'Michalke', 'diff');
+        ok = true; f = figure('Visible', 'off', 'Position', [0 0 1300 500]); cl = lines(numel(Ms));
+        for im = 1:numel(ms)
+            subplot(1, numel(ms), im); hold on;
+            for iM = 1:numel(Ms)
+                q = T.M == Ms(iM) & T.m == ms(im); g = -T.ai_theta(q); x = T.bt(q);
+                plot(x, g, 'o-', 'Color', cl(iM,:), 'MarkerSize', 3, 'DisplayName', sprintf('M = %g', Ms(iM)));
+                [gp, ip] = max(g); bn = NaN; c = T.c_over_U1(q);
+                j = ip;                                 % follow the branch past the peak while it stays the same
+                while j < numel(g) && g(j+1) > 0 && g(j+1) < g(j) && abs(c(j+1) - c(j)) < 0.05, j = j + 1; end
+                if j > ip, bn = x(j) + g(j)*(x(j) - x(j-1))/(g(j-1) - g(j)); end   % extrapolate to zero growth
+                [~, kr] = min(abs(ref.M - Ms(iM))); rv = ref.(sprintf('m%d', ms(im)))(kr);
+                fprintf('%5.2f %2d %10.4f %8.4f %10.3f %10.3f %+8.4f\n', Ms(iM), ms(im), gp, x(ip), bn, rv, gp - rv);
+                ok = ok && abs(gp - rv) <= 0.003;
+                plot(x(ip), rv, 'p', 'Color', cl(iM,:), 'MarkerSize', 10, 'HandleVisibility', 'off');
+            end
+            xlabel('\beta\theta/U_1'); ylabel('-\alpha_i\theta'); grid on; legend('Location', 'best');
+            title(sprintf('m = %d (stars: Michalke Fig. %d peak, read)', ms(im), 10 + ms(im)));
+        end
+        sgtitle(sprintf('Michalke 1971 profile 2, R/\\theta = %g, T^* = 1: lsa\\_local (lines) vs Michalke (stars)', Rt));
+        exportgraphics(f, fullfile(S.out_dir, sprintf('michalke_validate_Rtheta%g.png', Rt)), 'Resolution', 130); close(f);
+        % b check: eq. 2.11 (closed form, T* = 1) against the b solved from eq. 2.6
+        for iM = 1:numel(Ms)
+            [~, info] = michalke_base(R0, Rt, Ms(iM), 1, 'rho', rmax, gam);
+            fprintf('b check M = %4.2f: b solved %.5f, eq. 2.11 %.5f (f = %.4f)\n', Ms(iM), info.b, info.b_eq211, info.f);
+        end
+        if ok, fprintf('MICHALKE CHECK PASSED (all peaks within 0.003)\n'); else, fprintf('MICHALKE CHECK FAILED\n'); end
+
+    case 'freejet'
+        if ~strcmp(S.case, 'freejet'), error('MK_PART=''freejet'' needs CASE=''freejet'''); end
+        L = S.D_ref*1e3; R = S.D_j/2/S.D_ref; rmax = S.fj_rmax_mm/L;
+        Mj = S.M_j; Tstar = 1 + (gam - 1)/2*Mj^2;       % unheated: T0 jet = T ambient, so T* = T0/T1 = T0j/T_j
+        St = S.single_St; nS = numel(St); nm = numel(S.m);
+        if S.nworkers > 0 && isempty(gcp('nocreate')), parpool(S.nworkers); end
+        Tall = table(); prof = struct([]);
+        for it = 1:numel(S.mk_Rtheta)
+            Rt = S.mk_Rtheta(it);
+            [P, info] = michalke_base(R, Rt, Mj, Tstar, S.mk_theta_def, rmax, gam);
+            Sx = michalke_numerics(S, info, L);
+            fprintf('\nR/theta = %g: R = %.3f mm, b = %.4f, theta %.4f mm (rho-weighted %.4f, velocity %.4f mm), U1 = %.4f a0 (U_j %.4f)\n', ...
+                Rt, R*L, info.b, info.theta*L, info.theta_rho*L, info.theta_vel*L, info.U1, S.U_j/S.a_inf);
+            sols = cell(nS, nm);
+            parfor (is = 1:nS, S.nworkers)
+                row = cell(1, nm);
+                for im = 1:nm
+                    om  = St(is)*Sx.om_per_St;
+                    sol = solve_case(P, Sx.m(im), om, Sx.N, Sx, true);
+                    chk = solve_case(P, Sx.m(im), om, Sx.N_check, Sx, -1);
+                    sol = label_modes(mark_converged(sol, chk, Sx), P, Sx);
+                    row{im} = thin_vectors(sol, Sx);
+                end
+                sols(is, :) = row;
+            end
+            K = nan(nS, nm) + 1i*nan(nS, nm);
+            for is = 1:nS, for im = 1:nm, K(is, im) = michalke_pickKH(sols{is, im}, info.U1, S.mk_cmax); end, end
+            for im = 1:nm
+                Tm = table(repmat(Rt, nS, 1), repmat(info.b, nS, 1), St(:), St(:)*S.U_j/S.D_j/1e3, repmat(S.m(im), nS, 1), ...
+                    real(K(:, im)), imag(K(:, im)), (St(:)*S.om_per_St./real(K(:, im)))*S.a_inf/S.U_j, -imag(K(:, im))*info.theta, ...
+                    'VariableNames', {'R_theta', 'b', 'St_j', 'f_kHz', 'm', 'alpha_r_De', 'alpha_i_De', 'c_over_Uj', 'growth_theta'});
+                Tall = [Tall; Tm]; %#ok<AGROW>
+            end
+            for sj = [0.1 0.2 0.3 0.405 0.455]
+                [~, is] = min(abs(St - sj));
+                fprintf('  St_j %.3f: m0 %s   m1 %s\n', St(is), cfmt(K(is, 1), St(is)*S.om_per_St, S), cfmt(K(is, end), St(is)*S.om_per_St, S));
+            end
+            % one MODE='single'-format file per R/theta (LSA Viewer)
+            out = struct('sol', {sols}); P.Rtheta = Rt; P.b = info.b; prof = [prof, P]; %#ok<AGROW>
+            Sv = Sx; Sv.mode = 'single'; Sv.profile = 'michalke'; Sv.single_x_mm = 0; Sv.mk_info = info;
+            fn = sprintf('michalke_Rtheta%g_St_%.2f-%.2f_n%d_freeJet_lsa_single', Rt, min(St), max(St), nS);
+            save_single_file(fullfile(S.out_dir, [fn '.mat']), out, rmfield(P, {'Rtheta', 'b'}), Sv);
+            fprintf('saved %s.mat\n', fn);
+        end
+        writetable(Tall, fullfile(S.out_dir, 'michalke_freeJet_KH_vs_Stj.csv'));
+        plot_michalke_freejet(Tall, prof, S);
+    otherwise
+        error('MK_PART must be ''validate'' or ''freejet''');
+    end
+end
+
+function save_single_file(fname, out, prof, S) %#ok<INUSL>
+% a MODE='single'-format file (variables out, prof, S) that the LSA Viewer reads
+    save(fname, 'out', 'prof', 'S', '-v7.3');
+end
+
+function s = cfmt(a, om, S)
+    if isnan(a), s = 'none'; else, s = sprintf('%.4f%+.4fi (c/U_j %.3f)', real(a), imag(a), om/real(a)*S.a_inf/S.U_j); end
+end
+
+function plot_michalke_freejet(T, prof, S)
+    L = S.D_ref*1e3; Rts = unique(T.R_theta).'; cl = lines(numel(Rts));
+    f = figure('Visible', 'off', 'Position', [0 0 1400 800]);
+    labs = {'\alpha_r D_e', '-\alpha_i D_e', 'c_r / U_j'};
+    ov = {}; for xs = {'3.0', '4.0'}                   % two-tanh RANS-fit results, for reference only (outputs)
+        fcsv = fullfile(S.out_root, 'single_freeJet', ['fj_x' xs{1} '_KH_vs_Stj.csv']);
+        if exist(fcsv, 'file'), ov(end+1, :) = {xs{1}, readmatrix(fcsv)}; end %#ok<AGROW>
+    end
+    for im = 1:numel(S.m)
+        for k = 1:3
+            subplot(numel(S.m), 3, 3*(im-1) + k); hold on;
+            for it = 1:numel(Rts)
+                q = T.R_theta == Rts(it) & T.m == S.m(im); y = {T.alpha_r_De(q), -T.alpha_i_De(q), T.c_over_Uj(q)};
+                plot(T.St_j(q), y{k}, '-', 'Color', cl(it,:), 'LineWidth', 1.3, 'DisplayName', sprintf('Michalke R/\\theta = %g', Rts(it)));
+            end
+            for io = 1:size(ov, 1)
+                Rm = ov{io, 2}; q = Rm(:, 3) == S.m(im) & Rm(:, 1) >= 0.04; y = {Rm(q,4), -Rm(q,5), Rm(q,6)};
+                plot(Rm(q, 1), y{k}, '--', 'Color', [0.3 0.3 0.3] + 0.25*(io-1), 'DisplayName', sprintf('RANS two-tanh, x = %s mm', ov{io, 1}));
+            end
+            grid on; xlabel('St_j'); ylabel(labs{k}); title(sprintf('m = %d', S.m(im)));
+            if k == 2, legend('Location', 'northwest', 'FontSize', 7); end
+        end
+    end
+    sgtitle(sprintf('Free jet, Michalke profile 2 + Crocco-Busemann (M_j %.3f, T^* %.3f, R = D_j/2 = %.3f mm, \\theta %s-weighted): KH', ...
+        S.M_j, 1 + 0.2*S.M_j^2, S.D_j/2*1e3, S.mk_theta_def));
+    exportgraphics(f, fullfile(S.out_dir, 'michalke_freeJet_KH_vs_Stj.png'), 'Resolution', 130); close(f);
+    f = figure('Visible', 'off', 'Position', [0 0 1200 450]);
+    for it = 1:numel(prof)
+        subplot(1, 2, 1); hold on; plot(prof(it).r*L, prof(it).U*S.a_inf/S.U_j, 'Color', cl(it,:), 'DisplayName', sprintf('R/\\theta = %g', prof(it).Rtheta));
+        subplot(1, 2, 2); hold on; plot(prof(it).r*L, 1./prof(it).nu, 'Color', cl(it,:), 'DisplayName', sprintf('R/\\theta = %g', prof(it).Rtheta));
+    end
+    subplot(1, 2, 1); xlim([0 8]); grid on; xlabel('r [mm]'); ylabel('U / U_j'); legend; title('velocity (eq. 2.8)');
+    subplot(1, 2, 2); xlim([0 8]); grid on; xlabel('r [mm]'); ylabel('\rho / \rho_{amb}'); legend; title('density (Crocco-Busemann, p = p_{amb})');
+    exportgraphics(f, fullfile(S.out_dir, 'michalke_freeJet_profiles.png'), 'Resolution', 130); close(f);
 end
 
 % ------------------------------------------------------------------------------------- thickness study (T1) -----
