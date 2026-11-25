@@ -31,7 +31,7 @@ run = sys.argv[1].rstrip("/")
 tag = sys.argv[2] if len(sys.argv) > 2 else os.path.basename(run)
 stages = sorted(d for d in glob.glob(f"{run}/2_jet_staged/t*") if os.path.isdir(d))
 stages = [d for d in stages if os.path.isfile(f"{d}/history.csv")]   # skip stages set up but not started yet
-SC = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]   # one colour per stage
+SC = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]   # one colour per stage (up to t10)
 
 
 def cfg_of(s):
