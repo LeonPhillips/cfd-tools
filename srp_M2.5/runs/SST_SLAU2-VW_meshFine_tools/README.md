@@ -47,6 +47,24 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
   - First a 2000-iteration test at 104 cores (`TEST=1 TEST_P=6.6`, 0:12, at most 42 SU).
   - Full run: 2:00 walltime, at most 416 SU. Expected 75–95 min and 260–330 SU, against 3.3 h and 311 SU on 46 ranks.
 
+## CT sweep pilot (user, 2026-11-25)
+
+- **Conditions:** from `cases/srp_M2.5/CT_sweep_conditions.md` on Market (Schlieren1 file names). The file-name
+  CT, CTa and CTd are labels only: the RANS results are not matched to them (the line-loss estimates behind CTa/CTd
+  are likely too low).
+- **Boundary conditions:** p0inf = tunnel p0 absolute (gauge + 1.01325 bar). p0j = nozzle p01 after losses,
+  0.81895 × target + 0.03094 bar. T0inf = T0j = 288.15 K. Freestream p = p0inf / 2.25^3.5 at M 2.5.
+
+  | Label | p0inf | p0j | Freestream p | rho | Re/m |
+  |---|---|---|---|---|---|
+  | CT 0.1626 | 6.913 bar (5.90 g) | 4.535 bar (target 5.50) | 40,461.6 Pa | 1.10062 kg/m³ | 7.05e7 |
+  | CT 0.5202 | 3.013 bar (2.00 g) | 7.402 bar (target 9.00) | 17,635.8 Pa | 0.47972 kg/m³ | 3.07e7 |
+
+- **Start:** the converged 6.6 bar / 3.247 bar SLAU2-VW t5 solution (cumulative iteration 99,999), copied into
+  `0_start/`. Everything else is the 6.6 bar setup: t1–t5 (100k), `chain_sr.pbs`.
+- **Tests first:** `TEST=1 bash setup_ct_pilot.sh` builds `..._test` folders with t1 (1000, cap 0.5) and t2 (1000,
+  cap 1); run each with `qsub -l walltime=00:15:00` (at most 52 SU). Then `bash setup_ct_pilot.sh` for the full runs.
+
 ## Gadi resources
 
 - One normal-queue node per case: 48 cores, 190 GB. SU2 runs on 46 ranks; the other 2 cores run the watcher.
@@ -62,5 +80,6 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
 | `run_chain_gadi.sh` | The chain driver: probes, SU2, watcher per stage, then `plot_chain.py` |
 | `chain.pbs` | One case: `qsub -N <name> -v RUN=<run folder> chain.pbs` (title from `<run>/title.txt`) |
 | `chain_sr.pbs` | One case on one normalsr node (104 cores, 102 SU2 ranks), 2:00: `qsub -N <name> -v RUN=<run folder> chain_sr.pbs` |
+| `setup_ct_pilot.sh` | CT sweep pilot folders, restarted from the 6.6 bar t5 (`TEST=1`: t1 + t2 test folders) |
 | `add_stage.sh` | Adds a continuation stage from the previous stage's restart |
 | `test.pbs` | Checks ParaView 6.1 against M3's 5.13 (`compare_pv.py`), then runs 2000 live iterations |
