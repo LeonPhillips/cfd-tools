@@ -1,0 +1,34 @@
+# CT sweep run matrix (user, 2026-11-26), from cases/srp_M2.5/CT_sweep_conditions.md on Market (Schlieren1 file names).
+# label  tunnel_p0_gauge_bar  nozzle_target_abs_bar
+# setup_ct_sweep.sh computes p0inf = gauge + 1.01325 bar and p0j = 0.887732*target - 0.044750 bar abs (purple fit).
+CT0.1626 5.90 5.50
+CT0.1807 6.00 6.50
+CT0.1808 4.30 4.50
+CT0.1839 5.50 6.00
+CT0.1931 4.40 5.00
+CT0.1934 4.80 5.50
+CT0.1955 3.90 4.50
+CT0.1965 2.90 3.50
+CT0.2016 2.80 3.50
+CT0.2039 4.50 5.50
+CT0.2040 5.20 6.50
+CT0.2181 5.10 7.00
+CT0.2270 5.40 8.00
+CT0.2437 3.60 5.50
+CT0.2463 4.40 7.00
+CT0.2558 4.20 7.00
+CT0.2778 3.30 6.00
+CT0.2785 4.00 7.50
+CT0.2948 2.80 5.50
+CT0.2963 3.90 8.00
+CT0.3009 3.20 6.50
+CT0.3088 3.70 8.00
+CT0.3237 3.30 7.50
+CT0.3407 2.90 7.00
+CT0.3473 3.50 9.00
+CT0.3497 2.80 7.00
+CT0.3591 2.70 7.00
+CT0.3905 3.00 9.00
+CT0.4530 2.20 8.00
+CT0.4859 2.10 8.50
+CT0.5202 2.00 9.00
