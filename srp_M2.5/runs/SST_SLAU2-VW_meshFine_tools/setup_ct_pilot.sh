@@ -14,16 +14,16 @@
 # MARKER_SUPERSONIC_INLET), the jet p0 (MARKER_INLET), ITER, CFL start and cap, SOLUTION_FILENAME, comments.
 # Usage (login node; copies ~160 MB per case):
 #   TEST=1 bash setup_ct_pilot.sh        then, after the tests:   bash setup_ct_pilot.sh
-#   CASES="label:p0j_Pa:p0inf_Pa ..." overrides the case list.
+#   CASES="label:p0j_Pa:p0inf_Pa:p0j_name:p0inf_name ..." overrides the case list.
 set -e
 R=/scratch/os85/lp3540/su2/cases/srp_M2.5/runs
 SRC=$R/SST_p0j6.6_p0inf3.247_meshFine_SLAU2-VW/2_jet_staged/t5_cap3
 TOOLS=$(dirname $(readlink -f $0))
 COMMIT=$(git -C $TOOLS rev-parse --short HEAD 2>/dev/null || echo unknown)
-# label : p0j [Pa] : p0inf [Pa]
+# label : p0j [Pa] : p0inf [Pa] : p0j and p0inf for the folder name (bar, as in CT_sweep_conditions.md)
 #   CT 0.1626: tunnel 5.90 bar gauge -> 6.91325 bar abs; target 5.50 -> p01 4.535165 bar
 #   CT 0.5202: tunnel 2.00 bar gauge -> 3.01325 bar abs; target 9.00 -> p01 7.40149 bar
-CASES=${CASES:-"CT0.1626:453516.5:691325 CT0.5202:740149.0:301325"}
+CASES=${CASES:-"CT0.1626:453516.5:691325:4.535:6.913 CT0.5202:740149.0:301325:7.402:3.013"}
 
 mkcfg() {  # mkcfg <out> <label> <p0j Pa> <p0inf Pa> <stage> <ITER> <CFL0> <cap> <solution>
   local out=$1 lab=$2 pj=$3 p0=$4
@@ -63,8 +63,7 @@ else
   STAGES="t1_cap0.5:1000:0.1:0.5 t2_cap1:1000:0.5:1.0 t3_cap3:8000:1.0:3.0 t4_cap3:40000:1.0:3.0 t5_cap3:50000:1.0:3.0"; SUF=
 fi
 for c in $CASES; do
-  IFS=: read lab pj p0 <<< "$c"
-  P=$(awk -v a=$pj 'BEGIN{printf "%.3f", a/1e5}'); Q=$(awk -v a=$p0 'BEGIN{printf "%.3f", a/1e5}')
+  IFS=: read lab pj p0 P Q <<< "$c"   # names from the table: 0.81895*9+0.03094 = 7.40149 here, the table shows 7.402
   RUN=$R/SST_p0j${P}_p0inf${Q}_meshFine_SLAU2-VW$SUF
   [ -e $RUN ] && { echo "$RUN exists: not touched"; exit 1; }
   mkdir -p $RUN/0_start
