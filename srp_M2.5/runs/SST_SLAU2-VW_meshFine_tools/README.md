@@ -65,6 +65,17 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
 - **Tests first:** `TEST=1 bash setup_ct_pilot.sh` builds `..._test` folders with t1 (1000, cap 0.5) and t2 (1000,
   cap 1); run each with `qsub -l walltime=00:15:00` (at most 52 SU). Then `bash setup_ct_pilot.sh` for the full runs.
 
+- **Superseded (user, 2026-11-26):** the sweep now uses the purple fit (below). These runs are kept for reference.
+
+## CT sweep (user, 2026-11-26)
+
+- **p0j = 0.887732 × target − 0.044750 bar abs**: the purple line ("p0 (direct) fit, slope 0.888") in
+  `Leon_pitotTube_data/pitot_pdrop_p0_vs_target.fig`. p0inf as above (gauge + 1.01325 bar).
+- **Runs:** `/scratch/os85/lp3540/su2/cases/srp_M2.5/runs/CT-sweep/CT<label>_p0j<P>_p0inf<Q>/`, with a README there.
+- **Build:** `bash setup_ct_sweep.sh CT0.1626=<start stage folder> ...`. The conditions come from
+  `ct_sweep_matrix.txt` (label, tunnel gauge, nozzle target). Each case restarts from the converged solution given
+  (the nearest case), then t1–t5 as above; run each with `qsub -N <name> -v RUN=<case folder> chain_sr.pbs`.
+
 ## Gadi resources
 
 - One normal-queue node per case: 48 cores, 190 GB. SU2 runs on 46 ranks; the other 2 cores run the watcher.
@@ -81,5 +92,6 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
 | `chain.pbs` | One case: `qsub -N <name> -v RUN=<run folder> chain.pbs` (title from `<run>/title.txt`) |
 | `chain_sr.pbs` | One case on one normalsr node (104 cores, 102 SU2 ranks), 2:00: `qsub -N <name> -v RUN=<run folder> chain_sr.pbs` |
 | `setup_ct_pilot.sh` | CT sweep pilot folders, restarted from the 6.6 bar t5 (`TEST=1`: t1 + t2 test folders) |
+| `setup_ct_sweep.sh`, `ct_sweep_matrix.txt` | CT sweep folders in `runs/CT-sweep/` (purple-fit p0j), each from a given start solution |
 | `add_stage.sh` | Adds a continuation stage from the previous stage's restart |
 | `test.pbs` | Checks ParaView 6.1 against M3's 5.13 (`compare_pv.py`), then runs 2000 live iterations |
