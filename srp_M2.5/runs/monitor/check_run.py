@@ -1,7 +1,8 @@
 """One-line health check of a running phase. Usage: python check_run.py <phase folder>
 Prints the iteration, CD and its Cauchy value, rms[Rho] (last value and max over the last 500
 iterations, to show residual spikes), CFL, and flags:
-  CORRUPT   the freestream inlet mass flow has moved off its fixed value (1.86533 kg/s) by > 0.1 %,
+  CORRUPT   the freestream inlet mass flow has moved off its fixed value (1.86533 kg/s at p0inf 3.247 bar, scaled by
+            FREESTREAM_PRESSURE / 19003.9 from the folder's .cfg; 2026-11-25, CT sweep) by > 0.1 %,
             which is how the corrupted Phase 2 run first showed up in the history
   OSCILLATE CD over the last 2000 iterations, after removing its linear trend, has >= 6 swings and
             a band > 1 % of max(|CD|, 0.1), i.e. it is cycling rather than drifting (a steady drift
@@ -15,6 +16,8 @@ iterations, to show residual spikes), CFL, and flags:
             >= 3 times in the last 2000 iterations, checked after iteration 2000 (user, 2026-10-27)
 """
 import csv
+import glob
+import re
 import sys
 
 import numpy as np
@@ -27,7 +30,13 @@ it, cd, rho = c["Inner_Iter"], c["CD"], c["rms[Rho]"]
 mf = c["Avg_Massflow(inlet_freestream)"]
 w5, w20 = it >= it[-1] - 500, it >= it[-1] - 2000
 flags = []
-if np.max(np.abs(mf[w5] / 1.86533 - 1)) > 1e-3:
+mf0 = 1.86533
+for f in glob.glob(f"{sys.argv[1].rstrip('/')}/*.cfg"):
+    m = re.search(r"^FREESTREAM_PRESSURE=\s*([0-9.eE+-]+)", open(f).read(), re.M)
+    if m:
+        mf0 *= float(m.group(1)) / 19003.9
+        break
+if np.max(np.abs(mf[w5] / mf0 - 1)) > 1e-3:
     flags.append("CORRUPT")
 if len(rho) > 50 and rho[-1] > rho[:50].mean() + 1.5:
     flags.append("DIVERGE")
