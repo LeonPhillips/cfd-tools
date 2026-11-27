@@ -17,6 +17,8 @@
 # MARKER_SUPERSONIC_INLET), the jet p0 (MARKER_INLET), ITER, CFL start and cap, SOLUTION_FILENAME, comments.
 # Usage (login node; copies ~160 MB per case):
 #   bash setup_ct_sweep.sh CT0.1626=<start stage folder> CT0.5202=<start stage folder> ...
+#   CT0.1931=@CT0.1808: start from the final solution of sweep case CT0.1808 (copied when the job starts; submit
+#   with -W depend=afterany:<CT0.1808 job>; the parent must have AUTOSTOP_PASS.txt or AUTOSTOP_CAP.txt by then).
 #   then per case:  qsub -N <name> -l walltime=04:30:00 -v RUN=<case folder>,AUTOSTOP=1 chain_sr.pbs
 #   (OUT=<folder> builds elsewhere, e.g. for a test)
 set -e
@@ -66,19 +68,30 @@ mkcfg() {  # mkcfg <out> <label> <p0j Pa> <p0inf Pa> <stage> <ITER> <CFL0> <cap>
 [ -s $TEMPLATE ] && [ -s $MATRIX ] || { echo "missing $TEMPLATE or $MATRIX"; exit 1; }
 mkdir -p $OUT
 for arg in "$@"; do
-  lab=${arg%%=*}; START=$(readlink -f ${arg#*=})
+  lab=${arg%%=*}; src=${arg#*=}; PARENT=
+  if [[ $src == @* ]]; then   # deferred start: the final solution of another sweep case, copied when the job starts
+    PARENT=$(ls -d $OUT/${src#@}_p0j* 2>/dev/null | head -1)
+    [ -n "$PARENT" ] && [ -d $PARENT/2_jet_staged ] || { echo "$lab: parent case ${src#@} not found in $OUT"; exit 1; }
+    START="final stage of $PARENT (at job start)"
+  else
+    START=$(readlink -f $src)
+    [ -s $START/restart.dat ] && [ -s $START/flow.vtu ] || { echo "$lab: no restart.dat/flow.vtu in $START"; exit 1; }
+  fi
   row=$(awk -v l=$lab '$1==l' $MATRIX)
   [ -n "$row" ] || { echo "$lab not in $MATRIX"; exit 1; }
   read _ g t <<< "$row"
-  [ -s $START/restart.dat ] && [ -s $START/flow.vtu ] || { echo "$lab: no restart.dat/flow.vtu in $START"; exit 1; }
   p0=$(awk -v g=$g 'BEGIN{printf "%.1f", (g+1.01325)*1e5}')
   pj=$(awk -v t=$t 'BEGIN{printf "%.1f", (0.887732*t-0.044750)*1e5}')
   P=$(awk -v a=$pj 'BEGIN{printf "%.3f", a/1e5}'); Q=$(awk -v a=$p0 'BEGIN{printf "%.3f", a/1e5}')
   RUN=$OUT/${lab}_p0j${P}_p0inf${Q}
   [ -e $RUN ] && { echo "$RUN exists: not touched"; exit 1; }
   mkdir -p $RUN/0_start
-  cp $START/restart.dat $START/flow.vtu $RUN/0_start/
-  echo "start: copies of $START/{restart.dat,flow.vtu} ($(head -1 $START/../../title.txt 2>/dev/null))" > $RUN/0_start/SOURCE.txt
+  if [ -n "$PARENT" ]; then
+    echo $PARENT > $RUN/0_start/PARENT.txt   # run_chain_gadi.sh copies its final restart.dat and flow.vtu at job start
+  else
+    cp $START/restart.dat $START/flow.vtu $RUN/0_start/
+    echo "start: copies of $START/{restart.dat,flow.vtu} ($(head -1 $START/../../title.txt 2>/dev/null))" > $RUN/0_start/SOURCE.txt
+  fi
   echo "SST $lab: p0j $P bar, p0inf $Q bar, meshFine, SLAU2 + VW" > $RUN/title.txt
   printf "label %s\ntunnel p0 gauge %s bar -> p0inf %s Pa\nnozzle target %s bar -> p0j %s Pa (purple fit)\nstart %s\ncfd-tools %s\n" \
     $lab $g $p0 $t $pj $START $COMMIT > $RUN/BC.txt

@@ -67,6 +67,18 @@ stage() {  # stage <stage folder> <previous stage folder or -> <starting flow.vt
   done_step $d $s.cfg || { echo "STAGE FAILED: $s. Chain stopped."; exit 1; }
 }
 
+# Deferred start (CT sweep waves, 2026-11-27): 0_start/PARENT.txt names another sweep case; copy the restart.dat and
+# flow.vtu of its last stage, but only if that case finished (AUTOSTOP_PASS.txt or AUTOSTOP_CAP.txt).
+if [ ! -s $RUN/0_start/restart.dat ] && [ -s $RUN/0_start/PARENT.txt ]; then
+  par=$(cat $RUN/0_start/PARENT.txt)
+  ls $par/AUTOSTOP_PASS.txt $par/AUTOSTOP_CAP.txt >/dev/null 2>&1 || [ -e $par/AUTOSTOP_PASS.txt ] || [ -e $par/AUTOSTOP_CAP.txt ]     || { echo "parent $par has not finished (no AUTOSTOP_PASS/CAP): chain stopped"; exit 1; }
+  ps=$(ls -d $par/2_jet_staged/t* | sort | tail -1)
+  done_step $ps $(basename $ps).cfg && [ -s $ps/flow.vtu ] || { echo "parent's last stage $ps is not complete: chain stopped"; exit 1; }
+  cp $ps/restart.dat $ps/flow.vtu $RUN/0_start/ || exit 1
+  echo "start: copies of $ps/{restart.dat,flow.vtu} ($(cat $par/AUTOSTOP_*.txt | cut -c1-120)) $(date)" > $RUN/0_start/SOURCE.txt
+  echo "deferred start: $(cat $RUN/0_start/SOURCE.txt)"
+fi
+[ -s $RUN/0_start/restart.dat ] || { echo "no 0_start/restart.dat: chain stopped"; exit 1; }
 prev=-; start=$RUN/0_start/flow.vtu; cum=0
 for d in $(ls -d $RUN/2_jet_staged/t* | sort); do
   stage $d $prev $start; prev=$d; start=$d/flow.vtu
