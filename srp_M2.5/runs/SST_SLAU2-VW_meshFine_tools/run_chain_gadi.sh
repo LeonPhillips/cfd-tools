@@ -71,7 +71,7 @@ stage() {  # stage <stage folder> <previous stage folder or -> <starting flow.vt
 # flow.vtu of its last stage, but only if that case finished (AUTOSTOP_PASS.txt or AUTOSTOP_CAP.txt).
 if [ ! -s $RUN/0_start/restart.dat ] && [ -s $RUN/0_start/PARENT.txt ]; then
   par=$(cat $RUN/0_start/PARENT.txt)
-  ls $par/AUTOSTOP_PASS.txt $par/AUTOSTOP_CAP.txt >/dev/null 2>&1 || [ -e $par/AUTOSTOP_PASS.txt ] || [ -e $par/AUTOSTOP_CAP.txt ]     || { echo "parent $par has not finished (no AUTOSTOP_PASS/CAP): chain stopped"; exit 1; }
+  [ -e $par/AUTOSTOP_PASS.txt ] || [ -e $par/AUTOSTOP_CAP.txt ] || { echo "parent $par has not finished (no AUTOSTOP_PASS/CAP): chain stopped"; exit 1; }
   ps=$(ls -d $par/2_jet_staged/t* | sort | tail -1)
   done_step $ps $(basename $ps).cfg && [ -s $ps/flow.vtu ] || { echo "parent's last stage $ps is not complete: chain stopped"; exit 1; }
   cp $ps/restart.dat $ps/flow.vtu $RUN/0_start/ || exit 1
