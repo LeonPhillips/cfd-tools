@@ -74,7 +74,21 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
 - **Runs:** `/scratch/os85/lp3540/su2/cases/srp_M2.5/runs/CT-sweep/CT<label>_p0j<P>_p0inf<Q>/`, with a README there.
 - **Build:** `bash setup_ct_sweep.sh CT0.1626=<start stage folder> ...`. The conditions come from
   `ct_sweep_matrix.txt` (label, tunnel gauge, nozzle target). Each case restarts from the converged solution given
-  (the nearest case), then t1–t5 as above; run each with `qsub -N <name> -v RUN=<case folder> chain_sr.pbs`.
+  (the nearest case), then t1 1k, t2 1k and t3 8k (CFL 0.1 → 0.5, 0.5 → 1, 1 → 3).
+- **Auto-stop (user, 2026-11-27: "Auto-stop, cap 250k"; limits 0.02 mm / 0.01):** run each case with
+  `qsub -N <name> -l walltime=04:30:00 -v RUN=<case folder>,AUTOSTOP=1 chain_sr.pbs`. After t3, `run_chain_gadi.sh`
+  adds 10k chunks (`t4_c01`, `t4_c02`, ...: CFL 1 → 3 from the previous restart) and, from 50k cumulative iterations
+  on, runs `monitor/autostop_check.py` after each chunk. It stops when, over the last 10k iterations:
+  - the Mach disk x and the bow shock x (axis, 1 D, 2 D) each move by less than 0.02 mm, and
+  - the line mean |dMach| per 1000 iterations is below 0.01 on every line in every snapshot.
+
+  The stagnation point is not used (it wanders in weak-jet cases). A PASS writes `<run>/AUTOSTOP_PASS.txt`. At 250k
+  without a PASS it writes `AUTOSTOP_CAP.txt`, flags the case and exits 3. The first proposal (0.01 mm / 0.002) was
+  dropped: replayed on finished runs, even the converged 6.6 bar run never passed it.
+  `python autostop_check.py --replay <run>` replays the test on a finished chain (`TOL_MM`, `TOL_DMACH`, `WINDOW`
+  override the limits).
+- **Plan (2026-11-27):** the 29 cases run in three waves of about 10, each case restarting from the nearest finished
+  case (combined relative change in p0inf and p0j); the user is asked before each wave.
 
 ## Gadi resources
 
