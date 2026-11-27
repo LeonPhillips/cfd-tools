@@ -70,7 +70,7 @@ def bounds(a, top=True):
     if top:
         for k in range(len(stages)):
             a.text(off[k] + 0.005 * o, 0.985, name[k].split("_")[0], transform=a.get_xaxis_transform(), fontsize=8,
-                   va="top", color=SC[k], fontweight="bold")
+                   va="top", color=SC[k % len(SC)], fontweight="bold")
 
 
 # ---------- convergence_chain.png
@@ -126,7 +126,7 @@ if "Avg_Massflow(inlet_jet)" in H[0][0]:   # the jet is ~1 % of the freestream: 
                        fontsize=9)
 cl = "Avg CFL" if "Avg CFL" in H[0][0] else "AvgCFL"
 for k, (c, it) in enumerate(H):
-    ax[1, 1].semilogy(it, c[cl], lw=0.8, color=SC[k])
+    ax[1, 1].semilogy(it, c[cl], lw=0.8, color=SC[k % len(SC)])
 ax[1, 1].set_ylabel("average CFL"); ax[1, 1].set_title(f"CFL now {H[-1][0][cl][-1]:.3g}", fontsize=9)
 for a in list(ax[0, :]) + list(ax[1, :2]):
     a.grid(alpha=0.3); a.set_xlabel("cumulative iteration"); bounds(a)
@@ -177,7 +177,7 @@ for i, (a, n) in enumerate(zip(axs.flat, names)):
     for k in range(len(IT) - 1):
         a.plot(xs, LM[k, i], color=cmap(norm(IT[k])), lw=0.7)
     for k, e in enumerate(stage_end[:-1]):
-        a.plot(xs, LM[e, i], color=SC[k], lw=1.2, ls="--")
+        a.plot(xs, LM[e, i], color=SC[k % len(SC)], lw=1.2, ls="--")
     a.plot(xs, LM[-1, i], color="k", lw=1.6)
     t = f"{n}: (x, r) ({x0:g}, {r0:g}) -> ({x1:g}, {r1:g}) mm"
     if lc.size:
@@ -186,7 +186,7 @@ for i, (a, n) in enumerate(zip(axs.flat, names)):
 fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=axs, shrink=0.85, pad=0.01,
              label="snapshot cumulative iteration")
 hand = [Line2D([], [], color="k", lw=1.6, label=f"latest (cumulative iteration {int(IT[-1])})")]
-hand += [Line2D([], [], color=SC[k], lw=1.2, ls="--", label=f"end of {nice[k]} ({int(IT[e])})")
+hand += [Line2D([], [], color=SC[k % len(SC)], lw=1.2, ls="--", label=f"end of {nice[k]} ({int(IT[e])})")
          for k, e in enumerate(stage_end[:-1])]
 hand.append(Line2D([], [], color=cmap(0.5), lw=0.7, label=f"other snapshots, every 1000 it ({len(IT) - len(stages)})"))
 axs.flat[0].legend(handles=hand, fontsize=8, loc="best")
@@ -206,7 +206,7 @@ for a, (q, ylab, title) in zip(axs.flat, Q):
     ends = []
     for k, (h, v) in enumerate(F):
         j = h.index(q)
-        a.plot(v[:, 0] + off[k], v[:, j], "o-", ms=3.5, color=SC[k], label=nice[k])
+        a.plot(v[:, 0] + off[k], v[:, j], "o-", ms=3.5, color=SC[k % len(SC)], label=nice[k])
         ends.append(v[-1, j])
     step = " / ".join(f"{e:.3f}" for e in ends)
     a.set_title(f"{title}: end of each stage {step} mm", fontsize=10, pad=14)

@@ -11,21 +11,24 @@
 # Builds, under /scratch/os85/lp3540/su2/cases/srp_M2.5/runs/CT-sweep/:
 #   CT<label>_p0j<P>_p0inf<Q>/
 #     0_start/                  copies of the start stage's restart.dat and flow.vtu, SOURCE.txt
-#     2_jet_staged/t1_cap0.5 ... t1-t5 = 1k/1k/8k/40k/50k (CFL 0.1->0.5, 0.5->1, then 1->3)
+#     2_jet_staged/t1_cap0.5 ... t1-t3 = 1k/1k/8k (CFL 0.1->0.5, 0.5->1, 1->3); auto-stop chunks are added by the driver
 #     title.txt
 # Each config is the 6.6 bar t5 config with only: the freestream pressure (FREESTREAM_PRESSURE and
 # MARKER_SUPERSONIC_INLET), the jet p0 (MARKER_INLET), ITER, CFL start and cap, SOLUTION_FILENAME, comments.
 # Usage (login node; copies ~160 MB per case):
 #   bash setup_ct_sweep.sh CT0.1626=<start stage folder> CT0.5202=<start stage folder> ...
-#   then per case:  qsub -N ct0.1626 -v RUN=<case folder> chain_sr.pbs
+#   then per case:  qsub -N <name> -l walltime=04:30:00 -v RUN=<case folder>,AUTOSTOP=1 chain_sr.pbs
+#   (OUT=<folder> builds elsewhere, e.g. for a test)
 set -e
 R=/scratch/os85/lp3540/su2/cases/srp_M2.5/runs
-OUT=$R/CT-sweep
+OUT=${OUT:-$R/CT-sweep}
 TEMPLATE=$R/SST_p0j6.6_p0inf3.247_meshFine_SLAU2-VW/2_jet_staged/t5_cap3/t5_cap3.cfg
 TOOLS=$(dirname $(readlink -f $0))
 MATRIX=$TOOLS/ct_sweep_matrix.txt
 COMMIT=$(git -C $TOOLS rev-parse --short HEAD 2>/dev/null || echo unknown)
-STAGES="t1_cap0.5:1000:0.1:0.5 t2_cap1:1000:0.5:1.0 t3_cap3:8000:1.0:3.0 t4_cap3:40000:1.0:3.0 t5_cap3:50000:1.0:3.0"
+# Auto-stop sweep (user, 2026-11-27): only t1-t3 (10k) are built here; run_chain_gadi.sh with AUTOSTOP=1 adds 10k chunks
+# (t4_c01, ...) until autostop_check.py passes (from 50k) or 250k is reached. STAGES="name:ITER:CFL0:cap ..." overrides.
+STAGES=${STAGES:-"t1_cap0.5:1000:0.1:0.5 t2_cap1:1000:0.5:1.0 t3_cap3:8000:1.0:3.0"}
 
 mkcfg() {  # mkcfg <out> <label> <p0j Pa> <p0inf Pa> <stage> <ITER> <CFL0> <cap> <solution> <start>
   local out=$1 lab=$2 pj=$3 p0=$4

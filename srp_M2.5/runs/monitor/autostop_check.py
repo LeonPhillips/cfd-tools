@@ -1,9 +1,10 @@
 """Auto-stop test for the CT sweep (user, 2026-11-27: "Auto-stop, cap 250k"), from the live monitor's small files.
 
 PASS when, over the last WINDOW (10,000) iterations:
-  - Mach disk x, bow shock x on the axis, at 1 D and at 2 D each move by less than TOL_MM (0.01 mm) (max - min of the
+  - Mach disk x, bow shock x on the axis, at 1 D and at 2 D each move by less than TOL_MM (0.02 mm) (max - min of the
     snapshots in the window, including the snapshot at its start), and
-  - the line mean |dMach| per 1000 iterations is below TOL_DMACH (0.002) on every line, in every snapshot of the window.
+  - the line mean |dMach| per 1000 iterations is below TOL_DMACH (0.01) on every line, in every snapshot of the window.
+Replayed on 2026-11-27: the 6.6 bar / 3.247 bar run passes at 60k, CT 0.520 (purple) at 190k, CT 0.163 never (cycle).
 The stagnation point is not used (it wanders in weak-jet cases, e.g. CT 0.163). Missing or NaN values fail.
 The run driver (SST_SLAU2-VW_meshFine_tools/run_ct_autostop.sh) applies it only from 50,000 cumulative iterations, and
 stops at 250,000 whatever the result. CD and residuals are not used (convergence.md).
@@ -15,9 +16,9 @@ stops at 250,000 whatever the result. CD and residuals are not used (convergence
 """
 import csv, glob, math, os, sys
 
-WINDOW = 10000
-TOL_MM = float(os.environ.get("TOL_MM", 0.01))        # env overrides, for checking other limits with --replay
-TOL_DMACH = float(os.environ.get("TOL_DMACH", 0.002))
+WINDOW = int(os.environ.get("WINDOW", 10000))        # env overrides: for tests and for checking other limits with --replay
+TOL_MM = float(os.environ.get("TOL_MM", 0.02))        # limits set by the user on 2026-11-27 (0.01 / 0.002 first proposed:
+TOL_DMACH = float(os.environ.get("TOL_DMACH", 0.01))  # the converged 6.6 bar run never passed them)
 FEAT = ["mach_disk_x", "bow_x_axis", "bow_x_1D", "bow_x_2D"]
 
 

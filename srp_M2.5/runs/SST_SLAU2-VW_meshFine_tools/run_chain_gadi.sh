@@ -7,7 +7,7 @@
 # Start of the first stage: <run>/0_start/flow.vtu; later stages: the previous stage's flow.vtu.
 # Usage: bash run_chain_gadi.sh <run folder> "<chain title>"      Log: <run>/chain.log (appended)
 # Restartable: a stage counts as done only if its log says "SU2_CFD exit=0" and its history reaches ITER-1.
-# Nothing here stops on convergence.
+# Nothing here stops on convergence, except with AUTOSTOP=1 (CT sweep only, see the end of this file).
 TOOLS=$(dirname $(readlink -f $0)); MON=$(readlink -f $TOOLS/../monitor)
 RUN=$(readlink -f ${1:?run folder}); TITLE=${2:-$(basename $RUN)}
 NP=${NP:-46}   # chain.pbs: 46 of 48 (normal); chain_sr.pbs: 102 of 104 (normalsr); PV_MODULE=${PV_MODULE:-paraview/6.1.1-mesa}
@@ -67,10 +67,40 @@ stage() {  # stage <stage folder> <previous stage folder or -> <starting flow.vt
   done_step $d $s.cfg || { echo "STAGE FAILED: $s. Chain stopped."; exit 1; }
 }
 
-prev=-; start=$RUN/0_start/flow.vtu
+prev=-; start=$RUN/0_start/flow.vtu; cum=0
 for d in $(ls -d $RUN/2_jet_staged/t* | sort); do
   stage $d $prev $start; prev=$d; start=$d/flow.vtu
+  cum=$((cum + $(sed -n 's/^ITER= *\([0-9]*\).*/\1/p' $d/$(basename $d).cfg)))
 done
-echo "all stages done $(date)"
+echo "all stages done $(date), cumulative $cum iterations"
+
+# AUTOSTOP=1 (CT sweep, user 2026-11-27: "Auto-stop, cap 250k", limits 0.02 mm / 0.01): after the stages above, run
+# CHUNK-iteration continuation stages t4_c01, t4_c02, ... (CFL 1 -> cap 3, from the previous restart) until
+# monitor/autostop_check.py PASSes on the latest chunk (checked from MIN_CUM cumulative iterations on) or CAP is reached.
+# PASS -> <run>/AUTOSTOP_PASS.txt; cap -> <run>/AUTOSTOP_CAP.txt, the chain is flagged and exits 3. Restartable.
+rc=0
+if [ "${AUTOSTOP:-0}" = 1 ]; then
+  CHUNK=${CHUNK:-10000}; MIN_CUM=${MIN_CUM:-50000}; CAP=${CAP:-250000}
+  echo "autostop: chunk $CHUNK, min $MIN_CUM, cap $CAP, limits TOL_MM ${TOL_MM:-0.02} TOL_DMACH ${TOL_DMACH:-0.01} WINDOW ${WINDOW:-10000}"
+  pp=$(ls -d $RUN/2_jet_staged/t* | sort | tail -2 | head -1)   # the stage before the last one
+  while :; do
+    if [ $cum -ge $MIN_CUM ]; then
+      res=$(python $MON/autostop_check.py $prev $pp); arc=$?
+      echo "  autostop check after $(basename $prev) (cumulative $cum): $res"
+      if [ $arc -eq 0 ]; then
+        echo "PASS at cumulative iteration $cum ($(basename $prev)) $(date): $res" > $RUN/AUTOSTOP_PASS.txt; break
+      fi
+    fi
+    if [ $cum -ge $CAP ]; then
+      echo "CAP reached at cumulative iteration $cum without a PASS $(date): $res" > $RUN/AUTOSTOP_CAP.txt
+      echo "AUTOSTOP CAP REACHED: flagged, not converged by the auto-stop test"; rc=3; break
+    fi
+    n=$(ls -d $RUN/2_jet_staged/t4_c* 2>/dev/null | wc -l); nm=$(printf "t4_c%02d" $((n + 1)))
+    bash $TOOLS/add_stage.sh $RUN $(basename $prev) $nm $CHUNK 1.0 3.0 || { echo "add_stage failed"; exit 1; }
+    stage $RUN/2_jet_staged/$nm $prev $start
+    pp=$prev; prev=$RUN/2_jet_staged/$nm; start=$prev/flow.vtu; cum=$((cum + CHUNK))
+  done
+fi
 python $MON/plot_chain.py $RUN "$TITLE" && ls -l $RUN/*_chain.png
 echo "ALL_DONE $(date)"
+exit $rc
