@@ -88,7 +88,10 @@ t3 solutions, rerun for 10,000 iterations with SLAU2 fluxes and the Venkatakrish
   `python autostop_check.py --replay <run>` replays the test on a finished chain (`TOL_MM`, `TOL_DMACH`, `WINDOW`
   override the limits).
 - **Plan (2026-11-27):** the 29 cases run in three waves of about 10, each case restarting from the nearest finished
-  case (combined relative change in p0inf and p0j); the user is asked before each wave.
+  case (combined relative change in p0inf and p0j).
+- **Deferred start:** `bash setup_ct_sweep.sh CT0.1931=@CT0.1808` writes `0_start/PARENT.txt` instead of copying a
+  restart. `run_chain_gadi.sh` copies the parent's final restart.dat and flow.vtu when the job starts, and stops if
+  the parent has no `AUTOSTOP_PASS.txt` / `AUTOSTOP_CAP.txt`. Submit with `-W depend=afterany:<parent job>`.
 
 ## Gadi resources
 
