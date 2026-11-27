@@ -31,7 +31,7 @@ plots() {
 snaps() {
   local new=() f
   for f in $D/flow_*.vtu; do
-    [ -e "$f" ] && [ $(( $(date +%s) - $(stat -L -c %Y $f) )) -gt 60 ] && new+=($f)
+    [ -e "$f" ] && [ $(( $(date +%s) - $(stat -L -c %Y $f) )) -gt ${AGE:-60} ] && new+=($f)
   done
   if [ ${#new[@]} -gt 0 ]; then
     pv $MON/snap.py $D/snaps "${new[@]}" 2>&1 | grep -vi warning >> $D/watch.log
@@ -49,5 +49,6 @@ while [ -n "$(mine)" ]; do
   snaps
 done
 while [ -n "$(mine)" ]; do sleep 10; done   # let SU2 finish its final write
-sleep 70; snaps                             # final snapshot and plots
+sleep 5; AGE=0 snaps                        # final snapshot and plots (SU2 has exited, so its files are complete;
+                                            # was "sleep 70", which cost ~70 s per stage: 2026-11-27, CT sweep chunks)
 echo "$(date +%T) watcher done" >> $D/watch.log
