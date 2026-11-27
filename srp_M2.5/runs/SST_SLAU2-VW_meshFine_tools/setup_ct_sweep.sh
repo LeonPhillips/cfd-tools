@@ -94,7 +94,7 @@ for arg in "$@"; do
   fi
   echo "SST $lab: p0j $P bar, p0inf $Q bar, meshFine, SLAU2 + VW" > $RUN/title.txt
   printf "label %s\ntunnel p0 gauge %s bar -> p0inf %s Pa\nnozzle target %s bar -> p0j %s Pa (purple fit)\nstart %s\ncfd-tools %s\n" \
-    $lab $g $p0 $t $pj $START $COMMIT > $RUN/BC.txt
+    $lab $g $p0 $t $pj "$START" $COMMIT > $RUN/BC.txt
   prev=../../0_start/restart
   for st in $STAGES; do
     IFS=: read n it c0 cap <<< "$st"
