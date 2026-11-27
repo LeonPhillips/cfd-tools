@@ -15,7 +15,9 @@ stops at 250,000 whatever the result. CD and residuals are not used (convergence
 """
 import csv, glob, math, os, sys
 
-WINDOW, TOL_MM, TOL_DMACH = 10000, 0.01, 0.002
+WINDOW = 10000
+TOL_MM = float(os.environ.get("TOL_MM", 0.01))        # env overrides, for checking other limits with --replay
+TOL_DMACH = float(os.environ.get("TOL_DMACH", 0.002))
 FEAT = ["mach_disk_x", "bow_x_axis", "bow_x_1D", "bow_x_2D"]
 
 
